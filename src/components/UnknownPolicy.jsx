@@ -1,3 +1,5 @@
+import React from 'react'
+
 export function UnknownPolicy({ policy, onChange }) {
   const options = [['avoid', 'Avoid unknown'], ['neutral', 'Neutral'], ['show', 'Show gaps']]
   return <section className="unknown-control">

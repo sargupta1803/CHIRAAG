@@ -1,3 +1,5 @@
+import React from 'react'
+
 export function TimeControl({ hour, onChange }) {
   const format = value => `${String(value).padStart(2, '0')}:00`
   return <section className="control-section">

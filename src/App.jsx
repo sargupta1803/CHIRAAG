@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+﻿import React, { useEffect, useState } from 'react'
 import { getRoute, getSegment, USE_MOCK_DATA } from './lib/api'
 import { Header } from './components/Header'
 import { RouteComparison } from './components/RouteComparison'
@@ -9,16 +9,17 @@ import { UnknownPolicy as UnknownPolicyControl } from './components/UnknownPolic
 import { EvidencePanel } from './components/EvidencePanel'
 import { MapView } from './components/MapView'
 
+
 export default function App() {
   const [hour, setHour] = useState(23)
   const [detour, setDetour] = useState(20)
-  const [policy, setPolicy] = useState < UnknownPolicy > ('neutral')
+  const [policy, setPolicy] = useState('neutral')
   const [from, setFrom] = useState('Connaught Place')
   const [to, setTo] = useState('India Gate')
   const [journey, setJourney] = useState({ from: 'Connaught Place', to: 'India Gate' })
-  const [data, setData] = useState < RouteResponse | null > (null)
-  const [selectedRoute, setSelectedRoute] = useState < 'safe' | 'short' > ('safe')
-  const [selectedEvidence, setSelectedEvidence] = useState < EvidenceData | null > (null)
+  const [data, setData] = useState(null)
+  const [selectedRoute, setSelectedRoute] = useState('safe')
+  const [selectedEvidence, setSelectedEvidence] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 

@@ -1,3 +1,5 @@
+import React from 'react'
+
 export function DetourControl({ value, onChange }) {
   return <section className="control-section">
     <div className="control-title"><label htmlFor="detour">MAX DETOUR</label><output>{value}%</output></div>
