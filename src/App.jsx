@@ -1,6 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { getRoute, getSegment, USE_MOCK_DATA } from './lib/api'
-import type { EvidenceData, RouteResponse, UnknownPolicy } from './types'
 import { Header } from './components/Header'
 import { RouteComparison } from './components/RouteComparison'
 import { HeroMetric } from './components/HeroMetric'
@@ -13,13 +12,13 @@ import { MapView } from './components/MapView'
 export default function App() {
   const [hour, setHour] = useState(23)
   const [detour, setDetour] = useState(20)
-  const [policy, setPolicy] = useState<UnknownPolicy>('neutral')
+  const [policy, setPolicy] = useState < UnknownPolicy > ('neutral')
   const [from, setFrom] = useState('Connaught Place')
   const [to, setTo] = useState('India Gate')
   const [journey, setJourney] = useState({ from: 'Connaught Place', to: 'India Gate' })
-  const [data, setData] = useState<RouteResponse | null>(null)
-  const [selectedRoute, setSelectedRoute] = useState<'safe' | 'short'>('safe')
-  const [selectedEvidence, setSelectedEvidence] = useState<EvidenceData | null>(null)
+  const [data, setData] = useState < RouteResponse | null > (null)
+  const [selectedRoute, setSelectedRoute] = useState < 'safe' | 'short' > ('safe')
+  const [selectedEvidence, setSelectedEvidence] = useState < EvidenceData | null > (null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 
@@ -34,11 +33,11 @@ export default function App() {
     return () => { active = false }
   }, [hour, detour, policy, journey])
 
-  async function selectSegment(id: number) {
+  async function selectSegment(id) {
     try { setSelectedEvidence(await getSegment(id)) } catch { setError(true) }
   }
 
-  function findRoute(event: FormEvent) {
+  function findRoute(event) {
     event.preventDefault()
     setJourney({ from: from.trim() || 'Connaught Place', to: to.trim() || 'India Gate' })
     setSelectedRoute('safe')

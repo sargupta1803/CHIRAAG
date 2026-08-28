@@ -1,6 +1,4 @@
-import type { RouteDelta } from '../types'
-
-export function HeroMetric({ delta }: { delta: RouteDelta }) {
+export function HeroMetric({ delta }) {
   return <section className="hero-metric" aria-label="Unlit road avoided">
     <div className="metric-number">{delta.dark_avoided_m}<span>m</span></div>
     <div className="metric-label">LESS UNLIT ROAD</div>

@@ -1,8 +1,4 @@
-import type { RouteResponse } from '../types'
-
-interface Props { data: RouteResponse; selected: 'safe' | 'short'; onSelect: (route: 'safe' | 'short') => void }
-
-export function RouteComparison({ data, selected, onSelect }: Props) {
+export function RouteComparison({ data, selected, onSelect }) {
   return <section className="comparison" aria-label="Route comparison">
     <p className="eyebrow">COMPARE ROUTES</p>
     <button className={`route-choice ${selected === 'short' ? 'selected' : ''}`} onClick={() => onSelect('short')}>
