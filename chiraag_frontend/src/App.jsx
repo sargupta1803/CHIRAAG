@@ -28,7 +28,17 @@ export default function App() {
     setLoading(true)
     setError(false)
     getRoute(hour, detour, policy, journey.from, journey.to)
-      .then(route => active && setData(route))
+      .then(route => {
+        if (!active) return
+
+        setData(route)
+
+        setSelectedRoute(
+          route.recommended_route === 'safer'
+            ? 'safe'
+            : 'shortest'
+        )
+      })
       .catch(() => active && setError(true))
       .finally(() => active && setLoading(false))
     return () => { active = false }
@@ -41,7 +51,13 @@ export default function App() {
   function findRoute(event) {
     event.preventDefault()
     setJourney({ from: from.trim() || 'Connaught Place', to: to.trim() || 'India Gate' })
-    setSelectedRoute('safe')
+    function findRoute(event) {
+      event.preventDefault()
+      setJourney({
+        from: from.trim() || 'Connaught Place',
+        to: to.trim() || 'India Gate'
+      })
+    }
   }
 
   return <main className="app-shell">
@@ -59,7 +75,11 @@ export default function App() {
       {data && <>
         <div className="recommendation">
           <p className="eyebrow">CHIRAAG RECOMMENDS</p>
-          <div className="recommendation-title">Safer route</div>
+          <div className="recommendation-title">
+            {data.recommended_route === 'shortest'
+              ? 'Shortest route'
+              : 'Safer route'}
+          </div>
           <div className="route-duration">{data.safest.length_m} m <span>&middot; ~11 min</span></div>
           <HeroMetric delta={data.delta} />
           <button className="use-route" onClick={() => setSelectedRoute('safe')}>Use this route <span>&rarr;</span></button>

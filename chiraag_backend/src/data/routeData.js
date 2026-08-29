@@ -82,3 +82,14 @@ export const routeData = {
     }
   ]
 }
+
+export const routeCandidates = [
+  {
+    id: 'shortest',
+    segment_ids: [4412, 4413, 4415]
+  },
+  {
+    id: 'safer',
+    segment_ids: [4413, 4414, 4415]
+  }
+]
