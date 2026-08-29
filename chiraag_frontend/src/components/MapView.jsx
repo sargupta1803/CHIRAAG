@@ -1,96 +1,15 @@
-﻿import React, { useEffect, useRef } from 'react'
+﻿import React, { useEffect, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
-import { Protocol } from 'pmtiles'
+import 'maplibre-gl/dist/maplibre-gl.css'
 
-const road = (coordinates, kind) => ({
-  type: 'Feature',
-  properties: { kind },
-  geometry: {
-    type: 'LineString',
-    coordinates,
-  },
-})
 
-const ROAD_LINES = {
-  type: 'FeatureCollection',
-  features: [
-    road(
-      [[77.2108, 28.6348], [77.2142, 28.6339], [77.218, 28.6329], [77.2222, 28.6305], [77.2269, 28.6272]],
-      'primary'
-    ),
-    road(
-      [[77.2131, 28.6260], [77.2157, 28.6288], [77.2188, 28.6313], [77.2219, 28.6336], [77.2248, 28.6350]],
-      'primary'
-    ),
-    road(
-      [[77.2118, 28.6290], [77.2155, 28.6297], [77.2195, 28.6298], [77.2247, 28.6294], [77.2271, 28.6288]],
-      'secondary'
-    ),
-    road(
-      [[77.2147, 28.6360], [77.2161, 28.6331], [77.2173, 28.6300], [77.2190, 28.6262]],
-      'secondary'
-    ),
-    road(
-      [[77.2206, 28.6352], [77.2202, 28.6321], [77.2209, 28.6287], [77.2225, 28.6255]],
-      'secondary'
-    ),
-    road(
-      [[77.2122, 28.6331], [77.2149, 28.6318], [77.2176, 28.6307], [77.2204, 28.6297], [77.2238, 28.6281], [77.2261, 28.6265]],
-      'local'
-    ),
-    road(
-      [[77.2134, 28.6271], [77.2164, 28.6280], [77.2197, 28.6288], [77.2235, 28.6302], [77.2260, 28.6319]],
-      'local'
-    ),
-    road(
-      [[77.2151, 28.6350], [77.2172, 28.6322], [77.2193, 28.6300], [77.2214, 28.6270]],
-      'local'
-    ),
-    road(
-      [[77.2170, 28.6352], [77.2181, 28.6326], [77.2202, 28.6294], [77.2236, 28.6262]],
-      'local'
-    ),
-    road(
-      [[77.2228, 28.6342], [77.2225, 28.6310], [77.2238, 28.6281], [77.2255, 28.6262]],
-      'local'
-    ),
-  ],
-}
+const API_KEY = import.meta.env.VITE_MAPTILER_KEY
 
-const BLOCKS = {
-  type: 'FeatureCollection',
-  features: [
-    [[77.2115, 28.6340], [77.2139, 28.6335], [77.2149, 28.6319], [77.2125, 28.6321]],
-    [[77.2154, 28.6333], [77.2176, 28.6327], [77.2184, 28.6308], [77.2162, 28.6312]],
-    [[77.2194, 28.6325], [77.2214, 28.6314], [77.2213, 28.6298], [77.2195, 28.6301]],
-    [[77.2223, 28.6304], [77.2246, 28.6294], [77.2253, 28.6279], [77.2236, 28.6280]],
-    [[77.2140, 28.6300], [77.2159, 28.6298], [77.2168, 28.6282], [77.2147, 28.6280]],
-    [[77.2173, 28.6294], [77.2194, 28.6292], [77.2206, 28.6277], [77.2188, 28.6275]],
-    [[77.2209, 28.6285], [77.2226, 28.6278], [77.2234, 28.6264], [77.2217, 28.6262]],
-  ].map((coordinates) => ({
-    type: 'Feature',
-    properties: {},
-    geometry: {
-      type: 'Polygon',
-      coordinates: [[...coordinates, coordinates[0]]],
-    },
-  })),
-}
+const STREET_STYLE =
+  `https://api.maptiler.com/maps/streets-v4/style.json?key=${API_KEY}`
 
-const PARK = {
-  type: 'Feature',
-  properties: {},
-  geometry: {
-    type: 'Polygon',
-    coordinates: [[
-      [77.2231, 28.6334],
-      [77.2258, 28.6325],
-      [77.2263, 28.6344],
-      [77.2240, 28.6351],
-      [77.2231, 28.6334],
-    ]],
-  },
-}
+const SATELLITE_STYLE =
+  `https://api.maptiler.com/maps/satellite/style.json?key=${API_KEY}`
 
 const SEGMENTS = {
   type: 'FeatureCollection',
@@ -100,7 +19,11 @@ const SEGMENTS = {
       properties: { seg_id: 4412, status: 'observed' },
       geometry: {
         type: 'LineString',
-        coordinates: [[77.2186, 28.6317], [77.2201, 28.6306], [77.2212, 28.6286]],
+        coordinates: [
+          [77.2186, 28.6317],
+          [77.2201, 28.6306],
+          [77.2212, 28.6286],
+        ],
       },
     },
     {
@@ -108,7 +31,10 @@ const SEGMENTS = {
       properties: { seg_id: 4413, status: 'observed' },
       geometry: {
         type: 'LineString',
-        coordinates: [[77.2168, 28.6328], [77.2186, 28.6317]],
+        coordinates: [
+          [77.2168, 28.6328],
+          [77.2186, 28.6317],
+        ],
       },
     },
     {
@@ -116,7 +42,10 @@ const SEGMENTS = {
       properties: { seg_id: 4414, status: 'unknown' },
       geometry: {
         type: 'LineString',
-        coordinates: [[77.2161, 28.6313], [77.2173, 28.6296]],
+        coordinates: [
+          [77.2161, 28.6313],
+          [77.2173, 28.6296],
+        ],
       },
     },
     {
@@ -124,7 +53,11 @@ const SEGMENTS = {
       properties: { seg_id: 4415, status: 'observed' },
       geometry: {
         type: 'LineString',
-        coordinates: [[77.2173, 28.6296], [77.2195, 28.6290], [77.2212, 28.6286]],
+        coordinates: [
+          [77.2173, 28.6296],
+          [77.2195, 28.6290],
+          [77.2212, 28.6286],
+        ],
       },
     },
   ],
@@ -136,17 +69,26 @@ const OBSERVATIONS = {
     {
       type: 'Feature',
       properties: {},
-      geometry: { type: 'Point', coordinates: [77.2174, 28.6298] },
+      geometry: {
+        type: 'Point',
+        coordinates: [77.2174, 28.6298],
+      },
     },
     {
       type: 'Feature',
       properties: {},
-      geometry: { type: 'Point', coordinates: [77.2195, 28.6290] },
+      geometry: {
+        type: 'Point',
+        coordinates: [77.2195, 28.6290],
+      },
     },
     {
       type: 'Feature',
       properties: {},
-      geometry: { type: 'Point', coordinates: [77.2210, 28.6287] },
+      geometry: {
+        type: 'Point',
+        coordinates: [77.2210, 28.6287],
+      },
     },
   ],
 }
@@ -164,155 +106,11 @@ export function MapView({
 }) {
   const container = useRef(null)
   const map = useRef(null)
+  const markers = useRef([])
+  const [satellite, setSatellite] = useState(false)
 
-  useEffect(() => {
-    if (!container.current || map.current) return
-
-    const protocol = new Protocol()
-    maplibregl.addProtocol('pmtiles', protocol.tile)
-
-    const useLocalPmtiles =
-      import.meta.env.VITE_USE_LOCAL_PMTILES === 'true'
-
-    const style = useLocalPmtiles
-      ? {
-          version: 8,
-          sources: {
-            ward: {
-              type: 'vector',
-              url: 'pmtiles:///ward.pmtiles',
-            },
-          },
-          layers: [
-            {
-              id: 'background',
-              type: 'background',
-              paint: { 'background-color': '#e7e3d8' },
-            },
-          ],
-        }
-      : {
-          version: 8,
-          sources: {},
-          layers: [
-            {
-              id: 'background',
-              type: 'background',
-              paint: { 'background-color': '#e7e3d8' },
-            },
-          ],
-        }
-
-    const m = new maplibregl.Map({
-      container: container.current,
-      style,
-      center: [77.2194, 28.6302],
-      zoom: 15.65,
-      attributionControl: false,
-      pitchWithRotate: false,
-      dragRotate: false,
-    })
-
-    map.current = m
-
-    m.on('load', () => {
-      m.addSource('blocks', {
-        type: 'geojson',
-        data: BLOCKS,
-      })
-
-      m.addLayer({
-        id: 'blocks',
-        type: 'fill',
-        source: 'blocks',
-        paint: {
-          'fill-color': '#d8d5ca',
-          'fill-opacity': 0.7,
-        },
-      })
-
-      m.addSource('park', {
-        type: 'geojson',
-        data: PARK,
-      })
-
-      m.addLayer({
-        id: 'park',
-        type: 'fill',
-        source: 'park',
-        paint: {
-          'fill-color': '#cbd4c4',
-          'fill-opacity': 0.9,
-        },
-      })
-
-      m.addSource('roads', {
-        type: 'geojson',
-        data: ROAD_LINES,
-      })
-
-      m.addLayer({
-        id: 'road-casing',
-        type: 'line',
-        source: 'roads',
-        paint: {
-          'line-color': [
-            'match',
-            ['get', 'kind'],
-            'primary',
-            '#b9b6aa',
-            'secondary',
-            '#c8c4b8',
-            '#d5d1c7',
-          ],
-          'line-width': [
-            'match',
-            ['get', 'kind'],
-            'primary',
-            6,
-            'secondary',
-            4,
-            2,
-          ],
-          'line-opacity': 0.55,
-        },
-        layout: {
-          'line-cap': 'round',
-          'line-join': 'round',
-        },
-      })
-
-      m.addLayer({
-        id: 'roads',
-        type: 'line',
-        source: 'roads',
-        paint: {
-          'line-color': [
-            'match',
-            ['get', 'kind'],
-            'primary',
-            '#f8f6ef',
-            'secondary',
-            '#f1eee5',
-            '#e4e0d6',
-          ],
-          'line-width': [
-            'match',
-            ['get', 'kind'],
-            'primary',
-            5,
-            'secondary',
-            3,
-            1.3,
-          ],
-          'line-opacity': 1,
-        },
-        layout: {
-          'line-cap': 'round',
-          'line-join': 'round',
-        },
-      })
-
+  function addChiraagLayers(m) {
+    if (!m.getSource('shortest')) {
       m.addSource('shortest', {
         type: 'geojson',
         data: line(data.shortest.geojson),
@@ -332,7 +130,9 @@ export function MapView({
           'line-join': 'round',
         },
       })
+    }
 
+    if (!m.getSource('safest')) {
       m.addSource('safest', {
         type: 'geojson',
         data: line(data.safest.geojson),
@@ -352,7 +152,9 @@ export function MapView({
           'line-join': 'round',
         },
       })
+    }
 
+    if (!m.getSource('segments')) {
       m.addSource('segments', {
         type: 'geojson',
         data: SEGMENTS,
@@ -384,7 +186,9 @@ export function MapView({
           'line-width': 18,
         },
       })
+    }
 
+    if (!m.getSource('observations')) {
       m.addSource('observations', {
         type: 'geojson',
         data: OBSERVATIONS,
@@ -401,7 +205,9 @@ export function MapView({
           'circle-stroke-width': 2,
         },
       })
+    }
 
+    if (!m.getSource('selected-segment')) {
       m.addSource('selected-segment', {
         type: 'geojson',
         data: {
@@ -423,32 +229,80 @@ export function MapView({
           'line-cap': 'round',
         },
       })
+    }
+  }
 
-      const markers = [
-        {
-          coords: [77.2168, 28.6328],
-          label: 'A',
-          color: '#222522',
-          popup: 'Connaught Place',
-        },
-        {
-          coords: [77.2233, 28.6272],
-          label: 'B',
-          color: '#ad7f24',
-          popup: 'India Gate',
-        },
+  function addMarkers(m) {
+    markers.current.forEach(marker => marker.remove())
+    markers.current = []
+
+    const points = [
+      {
+        coords: [77.2168, 28.6328],
+        color: '#222522',
+        popup: 'Connaught Place',
+      },
+      {
+        coords: [77.2233, 28.6272],
+        color: '#ad7f24',
+        popup: 'India Gate',
+      },
+    ]
+
+    points.forEach(point => {
+      const marker = new maplibregl.Marker({
+        color: point.color,
+      })
+        .setLngLat(point.coords)
+        .setPopup(
+          new maplibregl.Popup({ offset: 22 }).setText(point.popup)
+        )
+        .addTo(m)
+
+      markers.current.push(marker)
+    })
+  }
+
+  useEffect(() => {
+    if (!container.current || map.current) return
+
+    const m = new maplibregl.Map({
+      container: container.current,
+      style: STREET_STYLE,
+      center: [77.2194, 28.6302],
+      zoom: 15.65,
+      attributionControl: false,
+      pitchWithRotate: false,
+      dragRotate: false,
+    })
+
+    m.addControl(
+      new maplibregl.NavigationControl({
+        showCompass: false,
+      }),
+      'top-right'
+    )
+
+    map.current = m
+
+    m.on('load', () => {
+      addChiraagLayers(m)
+      addMarkers(m)
+
+      const coords = [
+        ...data.shortest.geojson.geometry.coordinates,
+        ...data.safest.geojson.geometry.coordinates,
       ]
 
-      for (const marker of markers) {
-        new maplibregl.Marker({
-          color: marker.color,
-        })
-          .setLngLat(marker.coords)
-          .setPopup(
-            new maplibregl.Popup({ offset: 22 }).setText(marker.popup)
-          )
-          .addTo(m)
-      }
+      const bounds = coords.reduce(
+        (b, coord) => b.extend(coord),
+        new maplibregl.LngLatBounds(coords[0], coords[0])
+      )
+
+      m.fitBounds(bounds, {
+        padding: 100,
+        duration: 0,
+      })
 
       m.on('mouseenter', 'segment-hit', () => {
         m.getCanvas().style.cursor = 'pointer'
@@ -458,8 +312,8 @@ export function MapView({
         m.getCanvas().style.cursor = ''
       })
 
-      m.on('click', 'segment-hit', (e) => {
-        const id = e.features?.[0]?.properties?.seg_id
+      m.on('click', 'segment-hit', event => {
+        const id = event.features?.[0]?.properties?.seg_id
 
         if (id) {
           onSegment(Number(id))
@@ -468,6 +322,8 @@ export function MapView({
     })
 
     return () => {
+      markers.current.forEach(marker => marker.remove())
+      markers.current = []
       m.remove()
       map.current = null
     }
@@ -476,7 +332,7 @@ export function MapView({
   useEffect(() => {
     const m = map.current
 
-    if (!m?.isStyleLoaded()) return
+    if (!m || !m.isStyleLoaded()) return
 
     const shortestSource = m.getSource('shortest')
     const safestSource = m.getSource('safest')
@@ -512,50 +368,141 @@ export function MapView({
   useEffect(() => {
     const m = map.current
 
+    if (!m?.isStyleLoaded()) return
+
     const feature = SEGMENTS.features.find(
-      (f) => f.properties.seg_id === selectedSegment
+      f => f.properties.seg_id === selectedSegment
     )
 
-    if (m?.isStyleLoaded()) {
+    m.getSource('selected-segment')?.setData({
+      type: 'FeatureCollection',
+      features: feature ? [feature] : [],
+    })
+  }, [selectedSegment])
+
+  function switchStyle() {
+    const m = map.current
+
+    if (!m) return
+
+    const nextSatellite = !satellite
+
+    setSatellite(nextSatellite)
+
+    m.once('style.load', () => {
+      addChiraagLayers(m)
+      addMarkers(m)
+
+      const feature = SEGMENTS.features.find(
+        f => f.properties.seg_id === selectedSegment
+      )
+
       m.getSource('selected-segment')?.setData({
         type: 'FeatureCollection',
         features: feature ? [feature] : [],
       })
-    }
-  }, [selectedSegment])
+
+      m.on('mouseenter', 'segment-hit', () => {
+        m.getCanvas().style.cursor = 'pointer'
+      })
+
+      m.on('mouseleave', 'segment-hit', () => {
+        m.getCanvas().style.cursor = ''
+      })
+
+      m.on('click', 'segment-hit', event => {
+        const id = event.features?.[0]?.properties?.seg_id
+
+        if (id) {
+          onSegment(Number(id))
+        }
+      })
+    })
+
+    m.setStyle(
+      nextSatellite
+        ? SATELLITE_STYLE
+        : STREET_STYLE
+    )
+  }
 
   return (
     <div ref={container} className="map-canvas">
-      <div className="map-name name-cp">CONNAUGHT PLACE</div>
-      <div className="map-name name-park">CENTRAL PARK</div>
-      <div className="map-name name-ig">INDIA GATE</div>
-
       <div className="route-chip">
         <i className={selected === 'safe' ? 'gold' : 'grey'} />
+
         {selected === 'safe'
           ? 'Safer route selected'
           : 'Shortest route selected'}
+      </div>
+
+      <div
+        style={{
+          position: 'absolute',
+          top: 16,
+          left: 16,
+          zIndex: 10,
+          display: 'flex',
+          gap: 6,
+          background: 'rgba(255,255,255,0.96)',
+          padding: 4,
+          borderRadius: 8,
+          boxShadow: '0 2px 10px rgba(0,0,0,0.14)',
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            if (satellite) switchStyle()
+          }}
+          style={{
+            border: 'none',
+            borderRadius: 6,
+            padding: '7px 11px',
+            background: !satellite ? '#222522' : 'transparent',
+            color: !satellite ? '#fff' : '#222522',
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          Map
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (!satellite) switchStyle()
+          }}
+          style={{
+            border: 'none',
+            borderRadius: 6,
+            padding: '7px 11px',
+            background: satellite ? '#222522' : 'transparent',
+            color: satellite ? '#fff' : '#222522',
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          Satellite
+        </button>
       </div>
 
       <div className="map-legend">
         <span>
           <i className="legend-safe" /> Safer
         </span>
+
         <span>
           <i className="legend-short" /> Shortest
         </span>
+
         <span>
           <i className="legend-unknown" /> Limited observation
         </span>
       </div>
 
-      <div className="map-scale">
-        <i />
-        100 m
-      </div>
-
       <div className="map-attribution">
-        &copy; OpenStreetMap contributors &nbsp; Imagery &copy; Mapillary, CC BY-SA
+        © OpenStreetMap contributors &nbsp; | &nbsp; © MapTiler
       </div>
     </div>
   )

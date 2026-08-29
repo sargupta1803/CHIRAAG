@@ -1,118 +1,87 @@
-import { routeData, routeCandidates } from '../data/routeData.js'
+import { routeData } from '../data/routeData.js'
 import { calculateRouteRisk } from './safetyService.js'
 
-export function calculateRoute(hour, alpha, unknownPolicy) {
-  const data = structuredClone(routeData)
+async function geocode(place) {
+    const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(`${place}, New Delhi`)}.json?key=${process.env.MAPTILER_API_KEY}&country=in&proximity=77.2295,28.6129&limit=1`
 
-  const scoredSegments = data.segments.map(segment => ({
-    ...segment,
-    risk: segment.is_unknown
-      ? null
-      : calculateRouteRisk([segment], unknownPolicy).risk
-  }))
+    const response = await fetch(url)
 
-  const getRouteSegments = candidate =>
-    candidate.segment_ids
-      .map(id =>
-        scoredSegments.find(segment => segment.seg_id === id)
-      )
-      .filter(Boolean)
-
-  const scoredRoutes = routeCandidates.map(candidate => {
-    const segments = getRouteSegments(candidate)
-
-    const riskResult = calculateRouteRisk(
-      segments,
-      unknownPolicy
-    )
-
-    const baseRoute =
-      candidate.id === 'shortest'
-        ? data.shortest
-        : data.safest
-
-    const extraDistance =
-      baseRoute.length_m - data.shortest.length_m
-
-    const detourPct =
-      (extraDistance / data.shortest.length_m) * 100
-
-    const withinDetourLimit = detourPct <= alpha
-
-    const routeScore =
-      riskResult.risk === null
-        ? Infinity
-        : riskResult.risk + (detourPct / 100) * 0.5
-
-    return {
-      ...candidate,
-      segments,
-      risk: riskResult.risk,
-      detourPct,
-      withinDetourLimit,
-      routeScore
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Geocoding failed: ${response.status} ${errorText}`)
     }
-  })
 
-  const eligibleRoutes = scoredRoutes.filter(
-    route => route.withinDetourLimit
-  )
+    const data = await response.json()
 
-  const bestRoute =
-    eligibleRoutes.length > 0
-      ? eligibleRoutes.reduce((best, route) =>
-          route.routeScore < best.routeScore
-            ? route
-            : best
-        )
-      : scoredRoutes.find(route => route.id === 'shortest')
+    if (!data.features?.length) {
+        throw new Error(`Location not found: ${place}`)
+    }
 
-  data.shortest.risk =
-    scoredRoutes.find(route => route.id === 'shortest')?.risk ?? null
+    const [lon, lat] = data.features[0].geometry.coordinates
 
-  data.safest.risk =
-    scoredRoutes.find(route => route.id === 'safer')?.risk ?? null
+    return { lon, lat }
+}
 
-  data.recommended_route = bestRoute?.id ?? 'shortest'
+async function getWalkingRoute(from, to) {
+    const url =
+        `https://router.project-osrm.org/route/v1/driving/` +
+        `${from.lon},${from.lat};${to.lon},${to.lat}` +
+        `?overview=full&geometries=geojson&steps=true`
 
-  data.segments = scoredSegments
+    const response = await fetch(url)
 
-  const timeFactor =
-    hour < 18 ? 0.18 :
-    hour < 21 ? 0.62 :
-    1
+    if (!response.ok) {
+        throw new Error(`Routing failed: ${response.status}`)
+    }
 
-  const detourFactor = Math.min(
-    1,
-    Math.max(0.15, alpha / 20)
-  )
+    const data = await response.json()
 
-  data.delta.dark_avoided_m = Math.round(
-    306 * timeFactor * detourFactor
-  )
+    if (data.code !== 'Ok' || !data.routes?.length) {
+        throw new Error('No route found')
+    }
 
-  data.delta.extra_m = Math.round(
-    89 * detourFactor
-  )
+    return data.routes[0]
+}
 
-  data.delta.extra_pct = Math.round(
-    (data.delta.extra_m / data.shortest.length_m) * 100
-  )
+export async function calculateRoute(
+    hour,
+    alpha,
+    unknownPolicy,
+    from = 'Connaught Place',
+    to = 'India Gate'
+) {
+    const [fromCoord, toCoord] = await Promise.all([
+        geocode(from),
+        geocode(to)
+    ])
 
-  data.safest.length_m =
-    data.shortest.length_m + data.delta.extra_m
+    console.log('FROM:', from, fromCoord)
+    console.log('TO:', to, toCoord)
 
-  data.safest.dark_m = Math.max(
-    0,
-    Math.round(
-      data.shortest.dark_m -
-      data.delta.dark_avoided_m
+    const walkingRoute = await getWalkingRoute(fromCoord, toCoord)
+
+    const safety = calculateRouteRisk(
+        routeData.segments,
+        unknownPolicy
     )
-  )
 
-  if (unknownPolicy === 'avoid') {
-    data.safest.length_m += 24
-  }
+    const data = structuredClone(routeData)
 
-  return data
+    data.shortest.geojson = walkingRoute.geometry
+    data.shortest.length_m = Math.round(walkingRoute.distance)
+
+    data.safest.geojson = walkingRoute.geometry
+    data.safest.length_m = Math.round(walkingRoute.distance)
+
+    data.shortest.duration_s = Math.round(walkingRoute.duration)
+    data.safest.duration_s = Math.round(walkingRoute.duration)
+
+    data.segments = safety.segments
+
+    if (safety.risk !== null) {
+        data.shortest.risk = safety.risk
+        data.safest.risk = safety.risk
+    }
+
+    return data
 }
