@@ -1,0 +1,29 @@
+# FastAPI & Server
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+
+# Database & PostGIS
+psycopg2-binary
+SQLAlchemy
+geoalchemy2
+
+# Geospatial Processing & Graphs
+osmnx
+geopandas
+shapely
+networkx
+
+# ML & Data Analysis
+scikit-learn
+pandas
+numpy
+
+# HTTP & Utilities
+requests
+python-dotenv
+
+# Testing
+pytest
+httpx
