@@ -50,14 +50,11 @@ export default function App() {
 
   function findRoute(event) {
     event.preventDefault()
-    setJourney({ from: from.trim() || 'Connaught Place', to: to.trim() || 'India Gate' })
-    function findRoute(event) {
-      event.preventDefault()
-      setJourney({
-        from: from.trim() || 'Connaught Place',
-        to: to.trim() || 'India Gate'
-      })
-    }
+
+    setJourney({
+      from: from.trim() || 'Connaught Place',
+      to: to.trim() || 'India Gate'
+    })
   }
 
   return <main className="app-shell">
