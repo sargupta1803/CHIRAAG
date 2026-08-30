@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: chiraag
       POSTGRES_DB: chiraag
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
 
@@ -15,7 +15,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql://chiraag:chiraag@db:5432/chiraag
+      POSTGRES_USER: chiraag
+      POSTGRES_PASSWORD: chiraag
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: chiraag
     depends_on:
       - db
     volumes:

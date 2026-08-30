@@ -20,17 +20,31 @@ def _find_nearest_node(G: nx.MultiDiGraph, target_coords: tuple[float, float]) -
             
     return best_node
 
-def _calculate_edge_weight(u, v, k, d, lam: float) -> float:
-    """
-    Dynamic cost function: C(e) = length_m + lambda * (dark_fraction * length_m)
-    """
-    length = d.get("length_m", 1.0)
-    dark_frac = d.get("dark_fraction", 0.0)
+# def _calculate_edge_weight(u, v, k, d, lam: float) -> float:
+#     """
+#     Dynamic cost function: C(e) = length_m + lambda * (dark_fraction * length_m)
+#     """
+#     length = d.get("length_m", 1.0)
+#     dark_frac = d.get("dark_fraction", 0.0)
     
-    # Calculate unlit exposure distance penalty
-    unlit_length = dark_frac * length
-    return length + (lam * unlit_length)
-
+#     # Calculate unlit exposure distance penalty
+#     unlit_length = dark_frac * length
+    # return length + (lam * unlit_length)
+def _calculate_edge_weight(d: dict, lam: float) -> float:
+    """
+    d is a dict of {edge_key: attr_dict} for all parallel edges between u and v
+    — this is the shape NetworkX passes to a custom weight function on a
+    MultiDiGraph. We take the cheapest parallel edge, same as NetworkX's
+    own default multigraph weight function does.
+    """
+    best = float("inf")
+    for attrs in d.values():
+        length = attrs.get("length_m", 1.0)
+        dark_frac = attrs.get("dark_fraction", 0.0)
+        unlit_length = dark_frac * length
+        cost = length + (lam * unlit_length)
+        best = min(best, cost)
+    return best
 def _get_path_metrics(G: nx.MultiDiGraph, path_nodes: list) -> dict:
     """
     Aggregates physical length and unlit metrics for a given path node sequence.
@@ -80,7 +94,7 @@ def find_optimal_route(
     # 1. Baseline Route (lambda = 0: pure physical distance)
     baseline_path = nx.dijkstra_path(
         G, start_node, end_node, 
-        weight=lambda u, v, k, d: _calculate_edge_weight(u, v, k, d, lam=0.0)
+        weight=lambda u, v, d: _calculate_edge_weight(d, lam=0.0)
     )
     baseline_metrics = _get_path_metrics(G, baseline_path)
     
@@ -95,7 +109,7 @@ def find_optimal_route(
     for lam in lambda_candidates:
         candidate_path = nx.dijkstra_path(
             G, start_node, end_node,
-            weight=lambda u, v, k, d: _calculate_edge_weight(u, v, k, d, lam=lam)
+            weight=lambda u, v, d: _calculate_edge_weight(d, lam=lam)
         )
         candidate_metrics = _get_path_metrics(G, candidate_path)
         

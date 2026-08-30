@@ -1,4 +1,6 @@
 def calculate_segment_metrics(segment_length, light_positions, coverage_radius=25.0):
+    if segment_length <= 0:
+        return {'dark_fraction': 0.0, 'longest_gap_m': 0.0}
     if not light_positions:  #if no light was found
         return {'dark_fraction': 1.0, 'longest_gap_m': segment_length} 
         
@@ -18,7 +20,8 @@ def calculate_segment_metrics(segment_length, light_positions, coverage_radius=2
         else:
             merged[-1][1] = max(merged[-1][1], end)
     # calculating total lit area, then finding the fraction of area that is dark
-    lit_length = sum(end - start for start, end in merged)   
+    lit_length = sum(end - start for start, end in merged)
+
     dark_fraction = max(0.0, (segment_length - lit_length) / segment_length)
     
     # Calculate longest unlit gap
