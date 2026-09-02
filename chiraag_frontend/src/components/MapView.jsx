@@ -11,87 +11,8 @@ const STREET_STYLE =
 const SATELLITE_STYLE =
   `https://api.maptiler.com/maps/satellite/style.json?key=${API_KEY}`
 
-const SEGMENTS = {
-  type: 'FeatureCollection',
-  features: [
-    {
-      type: 'Feature',
-      properties: { seg_id: 4412, status: 'observed' },
-      geometry: {
-        type: 'LineString',
-        coordinates: [
-          [77.2186, 28.6317],
-          [77.2201, 28.6306],
-          [77.2212, 28.6286],
-        ],
-      },
-    },
-    {
-      type: 'Feature',
-      properties: { seg_id: 4413, status: 'observed' },
-      geometry: {
-        type: 'LineString',
-        coordinates: [
-          [77.2168, 28.6328],
-          [77.2186, 28.6317],
-        ],
-      },
-    },
-    {
-      type: 'Feature',
-      properties: { seg_id: 4414, status: 'unknown' },
-      geometry: {
-        type: 'LineString',
-        coordinates: [
-          [77.2161, 28.6313],
-          [77.2173, 28.6296],
-        ],
-      },
-    },
-    {
-      type: 'Feature',
-      properties: { seg_id: 4415, status: 'observed' },
-      geometry: {
-        type: 'LineString',
-        coordinates: [
-          [77.2173, 28.6296],
-          [77.2195, 28.6290],
-          [77.2212, 28.6286],
-        ],
-      },
-    },
-  ],
-}
 
-const OBSERVATIONS = {
-  type: 'FeatureCollection',
-  features: [
-    {
-      type: 'Feature',
-      properties: {},
-      geometry: {
-        type: 'Point',
-        coordinates: [77.2174, 28.6298],
-      },
-    },
-    {
-      type: 'Feature',
-      properties: {},
-      geometry: {
-        type: 'Point',
-        coordinates: [77.2195, 28.6290],
-      },
-    },
-    {
-      type: 'Feature',
-      properties: {},
-      geometry: {
-        type: 'Point',
-        coordinates: [77.2210, 28.6287],
-      },
-    },
-  ],
-}
+
 
 const line = (route) => ({
   type: 'FeatureCollection',
@@ -103,6 +24,10 @@ export function MapView({
   selected,
   selectedSegment,
   onSegment,
+  fromCoords,
+  toCoords,
+  fromName,
+  toName,
 }) {
   const container = useRef(null)
   const map = useRef(null)
@@ -113,7 +38,13 @@ export function MapView({
     if (!m.getSource('shortest')) {
       m.addSource('shortest', {
         type: 'geojson',
-        data: line(data.shortest.geojson),
+        data: line({
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: data.baseline_route.nodes,
+          },
+        }),
       })
 
       m.addLayer({
@@ -122,8 +53,8 @@ export function MapView({
         source: 'shortest',
         paint: {
           'line-color': '#575b58',
-          'line-width': selected === 'short' ? 6 : 3.5,
-          'line-opacity': selected === 'short' ? 0.92 : 0.64,
+          'line-width': selected === 'shortest' ? 6 : 3.5,
+          'line-opacity': selected === 'shortest' ? 0.92 : 0.64,
         },
         layout: {
           'line-cap': 'round',
@@ -135,7 +66,13 @@ export function MapView({
     if (!m.getSource('safest')) {
       m.addSource('safest', {
         type: 'geojson',
-        data: line(data.safest.geojson),
+        data: line({
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: data.chiraag_route.nodes,
+          },
+        }),
       })
 
       m.addLayer({
@@ -154,82 +91,7 @@ export function MapView({
       })
     }
 
-    if (!m.getSource('segments')) {
-      m.addSource('segments', {
-        type: 'geojson',
-        data: SEGMENTS,
-      })
 
-      m.addLayer({
-        id: 'unknown-segments',
-        type: 'line',
-        source: 'segments',
-        filter: ['==', ['get', 'status'], 'unknown'],
-        paint: {
-          'line-color': '#6e746e',
-          'line-width': 4,
-          'line-dasharray': [1.4, 1.4],
-          'line-opacity': 0.95,
-        },
-        layout: {
-          'line-cap': 'round',
-        },
-      })
-
-      m.addLayer({
-        id: 'segment-hit',
-        type: 'line',
-        source: 'segments',
-        paint: {
-          'line-color': '#000',
-          'line-opacity': 0,
-          'line-width': 18,
-        },
-      })
-    }
-
-    if (!m.getSource('observations')) {
-      m.addSource('observations', {
-        type: 'geojson',
-        data: OBSERVATIONS,
-      })
-
-      m.addLayer({
-        id: 'observations',
-        type: 'circle',
-        source: 'observations',
-        paint: {
-          'circle-radius': 4,
-          'circle-color': '#f9f6ed',
-          'circle-stroke-color': '#77836f',
-          'circle-stroke-width': 2,
-        },
-      })
-    }
-
-    if (!m.getSource('selected-segment')) {
-      m.addSource('selected-segment', {
-        type: 'geojson',
-        data: {
-          type: 'FeatureCollection',
-          features: [],
-        },
-      })
-
-      m.addLayer({
-        id: 'selected-line',
-        type: 'line',
-        source: 'selected-segment',
-        paint: {
-          'line-color': '#b84731',
-          'line-width': 7,
-          'line-opacity': 0.95,
-        },
-        layout: {
-          'line-cap': 'round',
-        },
-      })
-    }
   }
 
   function addMarkers(m) {
@@ -238,14 +100,14 @@ export function MapView({
 
     const points = [
       {
-        coords: [77.2168, 28.6328],
+        coords: [fromCoords.lon, fromCoords.lat],
         color: '#222522',
-        popup: 'Connaught Place',
+        popup: fromName,
       },
       {
-        coords: [77.2233, 28.6272],
+        coords: [toCoords.lon, toCoords.lat],
         color: '#ad7f24',
-        popup: 'India Gate',
+        popup: toName,
       },
     ]
 
@@ -290,8 +152,8 @@ export function MapView({
       addMarkers(m)
 
       const coords = [
-        ...data.shortest.geojson.geometry.coordinates,
-        ...data.safest.geojson.geometry.coordinates,
+        ...data.baseline_route.nodes,
+        ...data.chiraag_route.nodes,
       ]
 
       const bounds = coords.reduce(
@@ -304,21 +166,7 @@ export function MapView({
         duration: 0,
       })
 
-      m.on('mouseenter', 'segment-hit', () => {
-        m.getCanvas().style.cursor = 'pointer'
-      })
 
-      m.on('mouseleave', 'segment-hit', () => {
-        m.getCanvas().style.cursor = ''
-      })
-
-      m.on('click', 'segment-hit', event => {
-        const id = event.features?.[0]?.properties?.seg_id
-
-        if (id) {
-          onSegment(Number(id))
-        }
-      })
     })
 
     return () => {
@@ -337,19 +185,36 @@ export function MapView({
     const shortestSource = m.getSource('shortest')
     const safestSource = m.getSource('safest')
 
-    shortestSource?.setData(line(data.shortest.geojson))
-    safestSource?.setData(line(data.safest.geojson))
+    shortestSource?.setData(
+      line({
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: data.baseline_route.nodes,
+        },
+      })
+    )
+
+    safestSource?.setData(
+      line({
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: data.chiraag_route.nodes,
+        },
+      })
+    )
 
     m.setPaintProperty(
       'shortest-line',
       'line-width',
-      selected === 'short' ? 6 : 3.5
+      selected === 'shortest' ? 6 : 3.5
     )
 
     m.setPaintProperty(
       'shortest-line',
       'line-opacity',
-      selected === 'short' ? 0.92 : 0.64
+      selected === 'shortest' ? 0.92 : 0.64
     )
 
     m.setPaintProperty(
@@ -365,20 +230,7 @@ export function MapView({
     )
   }, [data, selected])
 
-  useEffect(() => {
-    const m = map.current
 
-    if (!m?.isStyleLoaded()) return
-
-    const feature = SEGMENTS.features.find(
-      f => f.properties.seg_id === selectedSegment
-    )
-
-    m.getSource('selected-segment')?.setData({
-      type: 'FeatureCollection',
-      features: feature ? [feature] : [],
-    })
-  }, [selectedSegment])
 
   function switchStyle() {
     const m = map.current
@@ -393,30 +245,7 @@ export function MapView({
       addChiraagLayers(m)
       addMarkers(m)
 
-      const feature = SEGMENTS.features.find(
-        f => f.properties.seg_id === selectedSegment
-      )
 
-      m.getSource('selected-segment')?.setData({
-        type: 'FeatureCollection',
-        features: feature ? [feature] : [],
-      })
-
-      m.on('mouseenter', 'segment-hit', () => {
-        m.getCanvas().style.cursor = 'pointer'
-      })
-
-      m.on('mouseleave', 'segment-hit', () => {
-        m.getCanvas().style.cursor = ''
-      })
-
-      m.on('click', 'segment-hit', event => {
-        const id = event.features?.[0]?.properties?.seg_id
-
-        if (id) {
-          onSegment(Number(id))
-        }
-      })
     })
 
     m.setStyle(
