@@ -7,17 +7,26 @@ class Location(BaseModel):
 class RouteRequest(BaseModel):
     origin: Location
     destination: Location
+
     alpha: float = Field(
-        default=1.20, 
-        ge=1.0, 
-        le=2.0, 
-        description="Detour cap multiplier (e.g. 1.20 allows max 20% extra distance)"
+        default=1.20,
+        ge=1.0,
+        le=2.0,
+        description="Maximum allowed detour multiplier"
+    )
+
+    unknown_policy: str = Field(
+        default="neutral",
+        pattern="^(avoid|neutral|show_gaps)$",
+        description="How to handle road segments with insufficient safety evidence"
     )
 
 class PathMetrics(BaseModel):
     total_length_m: float
     unlit_length_m: float
+    unknown_length_m: float
     dark_fraction: float
+    coverage_ratio: float
 
 class RouteOption(BaseModel):
     nodes: list[tuple[float, float]]  # List of (lon, lat) points for GeoJSON rendering

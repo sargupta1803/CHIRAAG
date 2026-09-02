@@ -1,8 +1,8 @@
 import geopandas as gpd
 
 def snap_lights_to_roads(roads_gdf, lights_gdf):
-    roads_projected = roads_gdf.to_crs(epsg=3857)
-    lights_projected = lights_gdf.to_crs(epsg=3857)
+    roads_projected = roads_gdf.to_crs(epsg=32643)
+    lights_projected = lights_gdf.to_crs(epsg=32643)
     roads_indexed = roads_projected.set_index('id')
 
     

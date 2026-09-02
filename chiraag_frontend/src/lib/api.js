@@ -29,6 +29,7 @@ export async function getRoute(
         lon: toCoords.lon,
       },
       alpha,
+      unknown_policy: unknownPolicy,
     }),
   })
 

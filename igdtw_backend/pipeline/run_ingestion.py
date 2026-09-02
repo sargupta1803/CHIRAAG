@@ -82,13 +82,26 @@ def score_and_write_segments(engine, roads_gdf: gpd.GeoDataFrame, lights_gdf: gp
         segment_length = road["length_m"] or 0.0
         light_positions = snapped.get(road_id, [])
 
-        metrics = calculate_segment_metrics(segment_length, light_positions)
+    if light_positions:
+        metrics = calculate_segment_metrics(
+            segment_length,
+            light_positions
+        )
 
         updates.append({
             "id": road_id,
             "dark_fraction": metrics["dark_fraction"],
             "longest_gap_m": metrics["longest_gap_m"],
-            "observation_state": "predicted" if light_positions else "unobserved",
+            "observation_state": "predicted",
+        })
+
+    else:
+        # No streetlight evidence does NOT mean the road is dark.
+        updates.append({
+            "id": road_id,
+            "dark_fraction": None,
+            "longest_gap_m": None,
+            "observation_state": "unobserved",
         })
 
     print(f"Writing scores for {len(updates)} road segments...")
