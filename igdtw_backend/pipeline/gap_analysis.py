@@ -1,14 +1,16 @@
 def calculate_segment_metrics(segment_length, light_positions, coverage_radius=25.0):
     if segment_length <= 0:
         return {'dark_fraction': 0.0, 'longest_gap_m': 0.0}
-    if not light_positions:  #if no light was found
-        return {'dark_fraction': 1.0, 'longest_gap_m': segment_length} 
+    if not light_positions:
+        return {'dark_fraction': None, 'longest_gap_m': None}
         
     intervals = []
     for pos in light_positions:
-        start = max(0.0, pos - coverage_radius)
-        end = min(segment_length, pos + coverage_radius)
-        intervals.append((start, end))
+        start = max(0.0, min(segment_length, pos - coverage_radius))
+        end = max(0.0, min(segment_length, pos + coverage_radius))
+
+        if end > start:
+            intervals.append((start, end))
         
     # Merge overlapping illuminated segments, 
     #if the start of the new light in intervals is less than the last of the merged, then merge them

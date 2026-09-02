@@ -44,7 +44,8 @@ def compute_route(
             G=G,
             origin_coords=origin_coords,
             dest_coords=dest_coords,
-            alpha=payload.alpha
+            alpha=payload.alpha,
+            unknown_policy=payload.unknown_policy
         )
 
         return route_result
