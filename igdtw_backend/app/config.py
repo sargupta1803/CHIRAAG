@@ -5,11 +5,11 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     # PostgreSQL / PostGIS Connection Settings
-    POSTGRES_USER: str = "chiraag_user"
-    POSTGRES_PASSWORD: str = "chiraag_pass"
+    POSTGRES_USER: str = "chiraag"
+    POSTGRES_PASSWORD: str = "chiraag"
     POSTGRES_HOST: str = "localhost"
-    POSTGRES_PORT: str = "5432"
-    POSTGRES_DB: str = "chiraag_db"
+    POSTGRES_PORT: str = "5434"
+    POSTGRES_DB: str = "chiraag"
     
     @property
     def DATABASE_URL(self) -> str:

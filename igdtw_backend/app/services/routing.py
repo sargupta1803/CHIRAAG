@@ -45,102 +45,138 @@ def _calculate_edge_weight(d: dict, lam: float) -> float:
         cost = length + (lam * unlit_length)
         best = min(best, cost)
     return best
+
 def _get_path_metrics(G: nx.MultiDiGraph, path_nodes: list) -> dict:
     """
-    Aggregates physical length and unlit metrics for a given path node sequence.
+    Aggregates physical length and unlit metrics for a given path.
+    Uses the same edge-selection rule as the routing weight function.
     """
 
     total_length = 0.0
     total_unlit = 0.0
-    
+
     for i in range(len(path_nodes) - 1):
         u = path_nodes[i]
         v = path_nodes[i + 1]
-        
-        # Grab attributes of the connecting edge
+
         edge_data = G.get_edge_data(u, v)
-        if edge_data:
-            # MultiDiGraph returns dict of parallel edges; grab key 0 for MVP
-            data = edge_data[0]
-            length = data.get("length_m", 0.0)
-            dark_frac = data.get("dark_fraction", 0.0)
-            
-            total_length += length
-            total_unlit += (dark_frac * length)
-            
+
+        if not edge_data:
+            continue
+
+        # Select the parallel edge with the lowest physical distance.
+        data = min(
+            edge_data.values(),
+            key=lambda attrs: attrs.get("length_m", float("inf"))
+        )
+
+        length = float(data.get("length_m", 0.0))
+        dark_frac = float(data.get("dark_fraction", 0.0))
+
+        total_length += length
+        total_unlit += dark_frac * length
+
     return {
         "total_length_m": round(total_length, 2),
         "unlit_length_m": round(total_unlit, 2),
-        "dark_fraction": round(total_unlit / total_length, 4) if total_length > 0 else 0.0
+        "dark_fraction": round(
+            total_unlit / total_length, 4
+        ) if total_length > 0 else 0.0
     }
 
 def find_optimal_route(
     G: nx.MultiDiGraph,
-    origin_coords: tuple[float, float],  # (lon, lat)
-    dest_coords: tuple[float, float],    # (lon, lat)
+    origin_coords: tuple[float, float],
+    dest_coords: tuple[float, float],
     alpha: float = 1.20
 ) -> dict:
     """
-    Executes lambda-sweep Dijkstra routing. Returns both the baseline (shortest)
-    and safest feasible CHIRAAG route within the specified detour cap alpha.
+    Finds the shortest route first, then searches for a safer route
+    that stays within the allowed detour cap.
     """
-    
+
     start_node = _find_nearest_node(G, origin_coords)
     end_node = _find_nearest_node(G, dest_coords)
-    
-    if not start_node or not end_node:
+
+    if start_node is None or end_node is None:
         raise ValueError("Could not snap origin or destination to graph nodes.")
 
-    # 1. Baseline Route (lambda = 0: pure physical distance)
+    # 1. True shortest-distance route
     baseline_path = nx.dijkstra_path(
-        G, start_node, end_node, 
+        G,
+        start_node,
+        end_node,
         weight=lambda u, v, d: _calculate_edge_weight(d, lam=0.0)
     )
+
     baseline_metrics = _get_path_metrics(G, baseline_path)
-    
+
     shortest_length = baseline_metrics["total_length_m"]
     max_allowed_length = alpha * shortest_length
-    
-    # 2. Lambda Sweep (sweep higher penalties to find safer routes)
+
+    # 2. Search increasingly safety-focused routes
     lambda_candidates = [0.5, 1.0, 2.0, 5.0, 10.0, 20.0]
+
     best_path = baseline_path
     best_metrics = baseline_metrics
-    
+
     for lam in lambda_candidates:
         candidate_path = nx.dijkstra_path(
-            G, start_node, end_node,
-            weight=lambda u, v, d: _calculate_edge_weight(d, lam=lam)
+            G,
+            start_node,
+            end_node,
+            weight=lambda u, v, d: _calculate_edge_weight(d, lam)
         )
-        candidate_metrics = _get_path_metrics(G, candidate_path)
-        
-        # Check if route stays within detour multiplier cap alpha
-        if candidate_metrics["total_length_m"] <= max_allowed_length:
-            # Keep candidate if it reduces unlit exposure over current best
-            if candidate_metrics["unlit_length_m"] < best_metrics["unlit_length_m"]:
-                best_path = candidate_path
-                best_metrics = candidate_metrics
-        else:
-            # Once detour cap is exceeded, higher lambdas will also exceed it
-            break
 
-    # 3. Construct Evidentiary Summary Stats
-    unlit_avoided_m = baseline_metrics["unlit_length_m"] - best_metrics["unlit_length_m"]
-    
+        candidate_metrics = _get_path_metrics(G, candidate_path)
+
+        # Reject routes exceeding the allowed detour.
+        if candidate_metrics["total_length_m"] > max_allowed_length:
+            continue
+
+        # Among feasible routes, choose the one with
+        # the lowest unlit exposure.
+        if (
+            candidate_metrics["unlit_length_m"]
+            < best_metrics["unlit_length_m"]
+        ):
+            best_path = candidate_path
+            best_metrics = candidate_metrics
+
+    unlit_avoided_m = (
+        baseline_metrics["unlit_length_m"]
+        - best_metrics["unlit_length_m"]
+    )
+
+    safety_gain_percent = (
+        (unlit_avoided_m / baseline_metrics["unlit_length_m"]) * 100
+        if baseline_metrics["unlit_length_m"] > 0
+        else 0.0
+    )
+
     return {
         "status": "success",
         "detour_multiplier_cap": alpha,
+
         "baseline_route": {
             "nodes": baseline_path,
             "metrics": baseline_metrics
         },
+
         "chiraag_route": {
             "nodes": best_path,
             "metrics": best_metrics
         },
+
         "evidence_summary": {
-            "unlit_meters_avoided": round(max(0.0, unlit_avoided_m), 2),
-            "extra_distance_m": round(best_metrics["total_length_m"] - shortest_length, 2),
-            "safety_gain_percent": round((unlit_avoided_m / baseline_metrics["unlit_length_m"] * 100), 1)
-                                   if baseline_metrics["unlit_length_m"] > 0 else 0.0
+            "unlit_meters_avoided": round(
+                max(0.0, unlit_avoided_m), 2
+            ),
+            "extra_distance_m": round(
+                best_metrics["total_length_m"] - shortest_length, 2
+            ),
+            "safety_gain_percent": round(
+                safety_gain_percent, 1
+            )
         }
     }

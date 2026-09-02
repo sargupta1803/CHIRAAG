@@ -884,3 +884,43 @@ input[type=range]::-moz-range-thumb {
         display: none
     }
 }
+
+.place-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: #fff;
+  border: 1px solid #d8d5cc;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.place-suggestion {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  text-align: left;
+  background: #fff;
+  border: 0;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+}
+
+.place-suggestion:hover {
+  background: #f3f1eb;
+}
+
+.place-suggestion strong {
+  display: block;
+  font-size: 14px;
+  color: #222522;
+}
+
+.place-suggestion small {
+  display: block;
+  margin-top: 3px;
+  color: #777;
+  font-size: 11px;
+}
