@@ -12,11 +12,42 @@ const SATELLITE_STYLE =
   `https://api.maptiler.com/maps/satellite/style.json?key=${API_KEY}`
 
 
-
-
 const line = (route) => ({
   type: 'FeatureCollection',
   features: [route],
+})
+
+const lineFeature = (coordinates) => ({
+  type: 'Feature',
+  geometry: {
+    type: 'LineString',
+    coordinates,
+  },
+})
+
+// One feature per physical street, carrying the evidence needed to colour
+// it and to open the drawer when clicked.
+const segmentCollection = (route) => ({
+  type: 'FeatureCollection',
+  features: (route?.segments || [])
+    .filter(segment => segment.coordinates?.length >= 2)
+    .map(segment => ({
+      type: 'Feature',
+      properties: {
+        road_id: segment.road_id,
+        observation_state: segment.observation_state,
+        // GeoJSON filters can't match null, so unknown is encoded as -1.
+        dark_fraction:
+          segment.dark_fraction === null ||
+          segment.dark_fraction === undefined
+            ? -1
+            : segment.dark_fraction,
+      },
+      geometry: {
+        type: 'LineString',
+        coordinates: segment.coordinates,
+      },
+    })),
 })
 
 export function MapView({
@@ -34,17 +65,48 @@ export function MapView({
   const markers = useRef([])
   const [satellite, setSatellite] = useState(false)
 
+  // Keep the latest callback and route in refs so the map event handlers,
+  // which are registered once, never close over stale props.
+  const onSegmentRef = useRef(onSegment)
+  const dataRef = useRef(data)
+  const selectedRef = useRef(selected)
+
+  useEffect(() => {
+    onSegmentRef.current = onSegment
+  }, [onSegment])
+
+  useEffect(() => {
+    dataRef.current = data
+    selectedRef.current = selected
+  }, [data, selected])
+
+  const activeRoute = () =>
+    selectedRef.current === 'safe'
+      ? dataRef.current?.chiraag_route
+      : dataRef.current?.baseline_route
+
+  const handleSegmentClick = useRef(event => {
+    const feature = event.features?.[0]
+    const roadId = feature?.properties?.road_id
+
+    if (roadId !== undefined && roadId !== null) {
+      onSegmentRef.current?.(roadId)
+    }
+  }).current
+
+  const handleSegmentEnter = useRef(event => {
+    event.target.getCanvas().style.cursor = 'pointer'
+  }).current
+
+  const handleSegmentLeave = useRef(event => {
+    event.target.getCanvas().style.cursor = ''
+  }).current
+
   function addChiraagLayers(m) {
     if (!m.getSource('shortest')) {
       m.addSource('shortest', {
         type: 'geojson',
-        data: line({
-          type: 'Feature',
-          geometry: {
-            type: 'LineString',
-            coordinates: data.baseline_route.nodes,
-          },
-        }),
+        data: line(lineFeature(data.baseline_route.nodes)),
       })
 
       m.addLayer({
@@ -66,13 +128,7 @@ export function MapView({
     if (!m.getSource('safest')) {
       m.addSource('safest', {
         type: 'geojson',
-        data: line({
-          type: 'Feature',
-          geometry: {
-            type: 'LineString',
-            coordinates: data.chiraag_route.nodes,
-          },
-        }),
+        data: line(lineFeature(data.chiraag_route.nodes)),
       })
 
       m.addLayer({
@@ -91,12 +147,78 @@ export function MapView({
       })
     }
 
+    if (!m.getSource('segments')) {
+      m.addSource('segments', {
+        type: 'geojson',
+        data: segmentCollection(
+          selected === 'safe' ? data.chiraag_route : data.baseline_route
+        ),
+      })
 
+      // Hatching over stretches we have no imagery for. This is what makes
+      // "unknown" visible rather than silently blending into the route.
+      m.addLayer({
+        id: 'segments-unknown',
+        type: 'line',
+        source: 'segments',
+        filter: ['==', ['get', 'observation_state'], 'unobserved'],
+        paint: {
+          'line-color': '#ffffff',
+          'line-width': 2.4,
+          'line-opacity': 0.95,
+          'line-dasharray': [0.9, 1.5],
+        },
+        layout: {
+          'line-cap': 'butt',
+        },
+      })
+
+      // Highlight for whichever street the drawer is showing.
+      m.addLayer({
+        id: 'segments-selected',
+        type: 'line',
+        source: 'segments',
+        filter: ['==', ['get', 'road_id'], -1],
+        paint: {
+          'line-color': '#111311',
+          'line-width': 10,
+          'line-opacity': 0.35,
+        },
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+      })
+
+      // Invisible wide hit area. Many segments are under 10 m long, so the
+      // clickable target has to be far wider than the drawn line.
+      m.addLayer({
+        id: 'segments-hit',
+        type: 'line',
+        source: 'segments',
+        paint: {
+          'line-color': '#000000',
+          'line-width': 22,
+          'line-opacity': 0,
+        },
+      })
+    }
+
+    m.off('click', 'segments-hit', handleSegmentClick)
+    m.on('click', 'segments-hit', handleSegmentClick)
+
+    m.off('mouseenter', 'segments-hit', handleSegmentEnter)
+    m.on('mouseenter', 'segments-hit', handleSegmentEnter)
+
+    m.off('mouseleave', 'segments-hit', handleSegmentLeave)
+    m.on('mouseleave', 'segments-hit', handleSegmentLeave)
   }
 
   function addMarkers(m) {
     markers.current.forEach(marker => marker.remove())
     markers.current = []
+
+    if (!fromCoords || !toCoords) return
 
     const points = [
       {
@@ -131,7 +253,7 @@ export function MapView({
     const m = new maplibregl.Map({
       container: container.current,
       style: STREET_STYLE,
-      center: [77.2194, 28.6302],
+      center: [77.2202, 28.6198],
       zoom: 15.65,
       attributionControl: false,
       pitchWithRotate: false,
@@ -165,11 +287,13 @@ export function MapView({
         padding: 100,
         duration: 0,
       })
-
-
     })
 
     return () => {
+      m.off('click', 'segments-hit', handleSegmentClick)
+      m.off('mouseenter', 'segments-hit', handleSegmentEnter)
+      m.off('mouseleave', 'segments-hit', handleSegmentLeave)
+
       markers.current.forEach(marker => marker.remove())
       markers.current = []
       m.remove()
@@ -182,27 +306,16 @@ export function MapView({
 
     if (!m || !m.isStyleLoaded()) return
 
-    const shortestSource = m.getSource('shortest')
-    const safestSource = m.getSource('safest')
-
-    shortestSource?.setData(
-      line({
-        type: 'Feature',
-        geometry: {
-          type: 'LineString',
-          coordinates: data.baseline_route.nodes,
-        },
-      })
+    m.getSource('shortest')?.setData(
+      line(lineFeature(data.baseline_route.nodes))
     )
 
-    safestSource?.setData(
-      line({
-        type: 'Feature',
-        geometry: {
-          type: 'LineString',
-          coordinates: data.chiraag_route.nodes,
-        },
-      })
+    m.getSource('safest')?.setData(
+      line(lineFeature(data.chiraag_route.nodes))
+    )
+
+    m.getSource('segments')?.setData(
+      segmentCollection(activeRoute())
     )
 
     m.setPaintProperty(
@@ -230,7 +343,17 @@ export function MapView({
     )
   }, [data, selected])
 
+  useEffect(() => {
+    const m = map.current
 
+    if (!m || !m.isStyleLoaded() || !m.getLayer('segments-selected')) return
+
+    m.setFilter('segments-selected', [
+      '==',
+      ['get', 'road_id'],
+      selectedSegment ?? -1,
+    ])
+  }, [selectedSegment])
 
   function switchStyle() {
     const m = map.current
@@ -245,7 +368,13 @@ export function MapView({
       addChiraagLayers(m)
       addMarkers(m)
 
-
+      if (selectedSegment !== null && selectedSegment !== undefined) {
+        m.setFilter('segments-selected', [
+          '==',
+          ['get', 'road_id'],
+          selectedSegment,
+        ])
+      }
     })
 
     m.setStyle(
