@@ -14,24 +14,25 @@ export default function App() {
   const [hour, setHour] = useState(23)
   const [detour, setDetour] = useState(20)
   const [policy, setPolicy] = useState('neutral')
-  const [from, setFrom] = useState('Connaught Place')
-  const [to, setTo] = useState('India Gate')
+  const [from, setFrom] = useState('Corridor south')
+  const [to, setTo] = useState('Corridor north')
   const [journey, setJourney] = useState({
-    from: 'Connaught Place',
-    to: 'India Gate',
-    fromCoords: null,
-    toCoords: null,
+    from: 'Corridor south',
+    to: 'Corridor north',
+    fromCoords: { lat: 28.612, lon: 77.212 },
+    toCoords: { lat: 28.617, lon: 77.212 },
   })
   const [data, setData] = useState(null)
   const [selectedRoute, setSelectedRoute] = useState('safe')
   const [selectedEvidence, setSelectedEvidence] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(false)
+  const [loading, setLoading] = useState(null)
+  const [error, setError] = useState(null)
   const [fromSuggestions, setFromSuggestions] = useState([])
   const [toSuggestions, setToSuggestions] = useState([])
   const [activeSearch, setActiveSearch] = useState(null)
   const searchRequest = useRef(0)
   const searchTimer = useRef(null)
+    const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     if (!journey.fromCoords || !journey.toCoords) return
@@ -39,7 +40,7 @@ export default function App() {
     let active = true
 
     setLoading(true)
-    setError(false)
+    setError(null)
 
     getRoute(
       hour,
@@ -65,7 +66,14 @@ export default function App() {
     return () => {
       active = false
     }
-  }, [hour, detour, policy, journey])
+  }, [hour, detour, policy, journey,refreshKey])
+
+    async function handleAudited(roadId) {
+    // Reload the drawer with the new ground truth, then re-route so the
+    // change is visible immediately.
+    setSelectedEvidence(await getSegment(roadId))
+    setRefreshKey(key => key + 1)
+  }
 
   async function selectSegment(id) {
     try { setSelectedEvidence(await getSegment(id)) } catch { setError(true) }
@@ -420,6 +428,10 @@ export default function App() {
                   : 0,
               dark_avoided_m: data.evidence_summary.unlit_meters_avoided,
             }}
+            coverage={Math.min(
+              data.baseline_route.metrics.coverage_ratio ?? 0,
+              data.chiraag_route.metrics.coverage_ratio ?? 0
+            )}
           />
           <button className="use-route" onClick={() => setSelectedRoute('safe')}>Use this route <span>&rarr;</span></button>
         </div>
@@ -429,6 +441,6 @@ export default function App() {
       </>}
       <div className="panel-footer"><span className="status-indicator">{USE_MOCK_DATA ? 'LOCAL DEMO DATA' : 'LIVE DATA'}</span><span>Click a street for proof</span></div>
     </aside>
-    <EvidencePanel evidence={selectedEvidence} onClose={() => setSelectedEvidence(null)} />
+    <EvidencePanel evidence={selectedEvidence} onClose={() => setSelectedEvidence(null)} onAudited={handleAudited} />
   </main>
 }

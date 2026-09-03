@@ -924,3 +924,78 @@ input[type=range]::-moz-range-thumb {
   color: #777;
   font-size: 11px;
 }
+.metric-caveat {
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.7;
+}
+.segment-state {
+  margin: 0 0 16px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+.audit-block {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.audit-open,
+.audit-submit {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 8px;
+  background: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.audit-submit {
+  margin-top: 10px;
+  background: #222522;
+  color: #fff;
+  border-color: #222522;
+}
+
+.audit-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.audit-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.audit-options button {
+  flex: 1 1 auto;
+  padding: 7px 9px;
+  font-size: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.audit-options button.active {
+  background: #ad7f24;
+  border-color: #ad7f24;
+  color: #fff;
+}
+
+.audit-note,
+.audit-error {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.7;
+}
+
+.audit-error {
+  color: #b3261e;
+  opacity: 1;
+}

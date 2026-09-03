@@ -34,13 +34,41 @@ export async function getRoute(
   })
 
   if (!response.ok) {
-    const message = await response.text()
-    throw new Error(message || 'Route data unavailable')
+    let message = 'Route data unavailable'
+
+    try {
+      const body = await response.json()
+
+      if (body?.detail) {
+        message = typeof body.detail === 'string'
+          ? body.detail
+          : body.detail[0]?.msg || message
+      }
+    } catch {
+      // non-JSON error body, keep the fallback
+    }
+
+    throw new Error(message)
+  }
+  return response.json()
+}
+export async function postAudit(roadSegmentId, rating, observedLightCount = 0) {
+  const response = await fetch(`${BASE_URL}/api/v1/evidence/audit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      road_segment_id: roadSegmentId,
+      rating,
+      observed_light_count: observedLightCount,
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error('Could not record your audit')
   }
 
   return response.json()
 }
-
 export async function getSegment(id) {
   const response = await fetch(
     `${BASE_URL}/api/v1/evidence/segment/${id}`

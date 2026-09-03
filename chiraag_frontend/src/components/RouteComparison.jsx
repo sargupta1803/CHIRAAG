@@ -1,5 +1,23 @@
 import React from 'react'
 
+function describeUnlit(metrics) {
+  const coverage = metrics.coverage_ratio ?? 0
+  const unlit = Math.round(metrics.unlit_length_m)
+  const pct = Math.round(coverage * 100)
+
+  // Below 40% observed, an unlit figure is more misleading than useful --
+  // "0 m unlit" would read as safe when it means we have not looked.
+  if (coverage < 0.4) {
+    return `${pct}% observed — not enough data`
+  }
+
+  if (coverage < 0.8) {
+    return `${unlit} m unlit · ${pct}% observed`
+  }
+
+  return `${unlit} m unlit`
+}
+
 export function RouteComparison({ data, selected, onSelect }) {
   const shortest = data.baseline_route
   const safer = data.chiraag_route
@@ -20,7 +38,7 @@ export function RouteComparison({ data, selected, onSelect }) {
         <span className="route-kind">
           <b>Shortest</b>
           <small>
-            {Math.round(shortest.metrics.unlit_length_m)} m unlit
+            {describeUnlit(shortest.metrics)}
           </small>
         </span>
 
@@ -41,7 +59,7 @@ export function RouteComparison({ data, selected, onSelect }) {
         <span className="route-kind">
           <b>Chiraag / safer</b>
           <small>
-            {Math.round(safer.metrics.unlit_length_m)} m unlit
+            {describeUnlit(safer.metrics)}
           </small>
         </span>
 

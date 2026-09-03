@@ -36,36 +36,35 @@ def build_graph_from_db(db_session) -> nx.MultiDiGraph:
         start_node = coords[0]
         end_node = coords[-1]
 
-        G.add_edge(
-            start_node,
-            end_node,
+        edge_attrs = dict(
             id=row.id,
             osm_id=row.osm_id,
             length_m=float(row.length_m or 0.0),
 
-            # IMPORTANT:
-            # Preserve NULL so routing can distinguish unknown
-            # from known dark.
+            # Preserve NULL so routing can distinguish unknown from known dark.
             dark_fraction=(
                 float(row.dark_fraction)
                 if row.dark_fraction is not None
                 else None
             ),
-
             longest_gap_m=(
                 float(row.longest_gap_m)
                 if row.longest_gap_m is not None
                 else None
             ),
-
             calibrated_prob=(
                 float(row.calibrated_lighting_prob)
                 if row.calibrated_lighting_prob is not None
                 else 0.5
             ),
-
             observation_state=row.observation_state,
-            geometry=line_geom
+            geometry=line_geom,
         )
+
+        # One DB row = one undirected street. Walking is bidirectional, so
+        # add both traversal directions.
+        G.add_edge(start_node, end_node, **edge_attrs)
+        G.add_edge(end_node, start_node, **edge_attrs)
+        
 
     return G
