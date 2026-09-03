@@ -12,24 +12,39 @@ def _dist(a, b) -> float:
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
 
-def _find_nearest_node(G: nx.MultiDiGraph, target_coords: tuple[float, float]) -> tuple[float, float]:
+def _find_nearest_node(
+    G: nx.MultiDiGraph,
+    target_coords: tuple[float, float]
+) -> tuple[tuple[float, float] | None, float]:
     """
-    Simple distance-based lookup to find the nearest graph node (lon, lat)
-    for a given input coordinate pair (target_lon, target_lat).
+    Find the nearest graph node to a (lon, lat) pair.
+
+    Returns (node, distance_in_metres). Longitude is scaled by cos(lat) so
+    the comparison is a real distance and not a degree-space one -- at
+    Delhi's latitude a degree of longitude is ~12% shorter than a degree
+    of latitude, which skews east-west snapping otherwise.
     """
     target_lon, target_lat = target_coords
+
+    lon_scale = 111320.0 * math.cos(math.radians(target_lat))
+    lat_scale = 110574.0
+
     best_node = None
     min_dist = float("inf")
 
     for node in G.nodes():
         node_lon, node_lat = node
-        # Approximation for small-scale distance matching
-        dist = math.hypot(node_lon - target_lon, node_lat - target_lat)
+
+        dist = math.hypot(
+            (node_lon - target_lon) * lon_scale,
+            (node_lat - target_lat) * lat_scale,
+        )
+
         if dist < min_dist:
             min_dist = dist
             best_node = node
 
-    return best_node
+    return best_node, min_dist
 
 
 def _pick_edge(G: nx.MultiDiGraph, u, v) -> dict | None:
@@ -98,18 +113,13 @@ def _calculate_edge_weight(
     return best
 
 
-def _path_geometry(G: nx.MultiDiGraph, path_nodes: list, tol: float = 1e-9) -> list:
+def _path_segments(G: nx.MultiDiGraph, path_nodes: list) -> list[dict]:
     """
-    Stitch true edge geometries into one continuous coordinate list.
-
-    Graph nodes are only segment endpoints, so returning them alone draws
-    straight chords across curved streets (~40% of segments carry interior
-    vertices). Each edge holds its full LineString as loaded from PostGIS.
-
-    Falls back to bare node coordinates if no geometry is available, so
-    synthetic graphs (tests, seed data) still return something sensible.
+    Walk the path and return one entry per physical street, each with its
+    own geometry and evidence. This is what lets the map colour streets
+    individually and hang a click handler on them.
     """
-    coords: list = []
+    segments = []
 
     for u, v in zip(path_nodes, path_nodes[1:]):
         data = _pick_edge(G, u, v)
@@ -120,20 +130,39 @@ def _path_geometry(G: nx.MultiDiGraph, path_nodes: list, tol: float = 1e-9) -> l
         geom = data.get("geometry")
 
         if geom is None:
-            seg = [tuple(u), tuple(v)]
+            coords = [tuple(u), tuple(v)]
         else:
-            seg = [(x, y) for x, y in geom.coords]
+            coords = [(x, y) for x, y in geom.coords]
 
-            # Both traversal directions share one stored geometry, so it may
-            # run v->u. Flip it when its start is further from u than its end.
-            if _dist(seg[0], u) > _dist(seg[-1], u):
-                seg.reverse()
+            # Both directions share one stored geometry, so it may run v->u.
+            if _dist(coords[0], u) > _dist(coords[-1], u):
+                coords.reverse()
 
-        # Consecutive edges share a junction node -- don't emit it twice.
-        if coords and _dist(coords[-1], seg[0]) < tol:
-            seg = seg[1:]
+        segments.append({
+            "road_id": data.get("id"),
+            "length_m": round(float(data.get("length_m", 0.0)), 2),
+            "dark_fraction": data.get("dark_fraction"),
+            "observation_state": data.get("observation_state", "unobserved"),
+            "coordinates": coords,
+        })
 
-        coords.extend(seg)
+    return segments
+
+
+def _path_geometry(G: nx.MultiDiGraph, path_nodes: list, tol: float = 1e-9) -> list:
+    """
+    Flatten the per-segment geometries into one continuous coordinate list.
+    """
+    coords: list = []
+
+    for segment in _path_segments(G, path_nodes):
+        piece = segment["coordinates"]
+
+        # Consecutive streets share a junction node -- don't emit it twice.
+        if coords and _dist(coords[-1], piece[0]) < tol:
+            piece = piece[1:]
+
+        coords.extend(piece)
 
     return coords or [tuple(n) for n in path_nodes]
 
@@ -208,28 +237,49 @@ def find_optimal_route(
     origin_coords: tuple[float, float],
     dest_coords: tuple[float, float],
     alpha: float = 1.20,
-    unknown_policy: str = "neutral"
+    unknown_policy: str = "neutral",
+    max_snap_m: float = 250.0
 ) -> dict:
     """
     Finds the shortest route first, then searches for a safer route
     that stays within the allowed detour cap.
     """
 
-    start_node = _find_nearest_node(G, origin_coords)
-    end_node = _find_nearest_node(G, dest_coords)
+    start_node, start_dist = _find_nearest_node(G, origin_coords)
+    end_node, end_dist = _find_nearest_node(G, dest_coords)
 
     if start_node is None or end_node is None:
-        raise ValueError("Could not snap origin or destination to graph nodes.")
+        raise ValueError("Road network graph is empty.")
+
+    # Snapping without a distance limit silently returns a route starting at
+    # the edge of the mapped area when the request is outside it -- a wrong
+    # answer presented as a correct one.
+    if start_dist > max_snap_m:
+        raise ValueError(
+            f"Start point is {start_dist:.0f} m from the nearest mapped street. "
+            f"CHIRAAG only covers a small area of Delhi right now."
+        )
+
+    if end_dist > max_snap_m:
+        raise ValueError(
+            f"Destination is {end_dist:.0f} m from the nearest mapped street. "
+            f"CHIRAAG only covers a small area of Delhi right now."
+        )
 
     # 1. True shortest-distance route
-    baseline_path = nx.dijkstra_path(
-        G,
-        start_node,
-        end_node,
-        weight=lambda u, v, d: _calculate_edge_weight(
-            d, lam=0.0, unknown_policy=unknown_policy
+    try:
+        baseline_path = nx.dijkstra_path(
+            G,
+            start_node,
+            end_node,
+            weight=lambda u, v, d: _calculate_edge_weight(
+                d, lam=0.0, unknown_policy=unknown_policy
+            )
         )
-    )
+    except nx.NetworkXNoPath:
+        raise ValueError(
+            "No walking route exists between these points in the mapped network."
+        )
 
     baseline_metrics = _get_path_metrics(
         G, baseline_path, lam=0.0, unknown_policy=unknown_policy
@@ -291,11 +341,13 @@ def find_optimal_route(
 
         "baseline_route": {
             "nodes": _path_geometry(G, baseline_path),
+            "segments": _path_segments(G, baseline_path),
             "metrics": baseline_metrics
         },
 
         "chiraag_route": {
             "nodes": _path_geometry(G, best_path),
+            "segments": _path_segments(G, best_path),
             "metrics": best_metrics
         },
 
