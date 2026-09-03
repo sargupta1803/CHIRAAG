@@ -1,7 +1,11 @@
 import React from 'react'
 
 export function UnknownPolicy({ policy, onChange }) {
-  const options = [['avoid', 'Avoid unknown'], ['neutral', 'Neutral'], ['show', 'Show gaps']]
+  const options = [
+    ['avoid', 'Avoid unknown'],
+    ['neutral', 'Neutral'],
+    ['show_gaps', 'Show gaps'],
+  ]
   return <section className="unknown-control">
     <p className="eyebrow">UNKNOWN POLICY</p>
     <div className="policy-options" role="radiogroup" aria-label="Unknown segment policy">

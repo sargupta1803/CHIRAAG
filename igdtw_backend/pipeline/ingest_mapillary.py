@@ -1,29 +1,87 @@
+import time
 import requests
 import geopandas as gpd
 from shapely.geometry import Point
 from sqlalchemy import create_engine, text
 
-def ingest_mapillary(bbox, access_token, db_url):
-    url = f"https://graph.mapillary.com/map_features?fields=id,geometry&object_value=object--street-light&bbox={bbox}"
+MAPILLARY_URL = "https://graph.mapillary.com/map_features"
+
+
+def _split_bbox(bbox):
+    """Split 'minLon,minLat,maxLon,maxLat' into four quadrants."""
+    min_lon, min_lat, max_lon, max_lat = (float(v) for v in bbox.split(","))
+    mid_lon = (min_lon + max_lon) / 2
+    mid_lat = (min_lat + max_lat) / 2
+    return [
+        f"{min_lon},{min_lat},{mid_lon},{mid_lat}",
+        f"{mid_lon},{min_lat},{max_lon},{mid_lat}",
+        f"{min_lon},{mid_lat},{mid_lon},{max_lat}",
+        f"{mid_lon},{mid_lat},{max_lon},{max_lat}",
+    ]
+
+
+def _fetch_tile(bbox, access_token, depth=0, max_depth=3):
+    """Fetch street-light features for one bbox, subdividing on failure.
+
+    Mapillary returns HTTP 500 / error_subcode 99 for bboxes it considers
+    too large, so we recursively quarter the area instead of giving up.
+    """
+    params = {
+        "fields": "id,geometry",
+        "object_value": "object--street-light",
+        "bbox": bbox,
+    }
     headers = {"Authorization": f"OAuth {access_token}"}
-    response = requests.get(url, headers=headers)
 
-    if response.status_code != 200:
-        print(f"Mapillary API returned HTTP {response.status_code}: {response.text}")
-        response.raise_for_status()
+    try:
+        response = requests.get(
+            MAPILLARY_URL, params=params, headers=headers, timeout=60
+        )
+        status = response.status_code
+    except requests.RequestException as exc:
+        print(f"  request error on {bbox}: {exc}")
+        response, status = None, "network error"
 
-    res = response.json()
+    if response is not None and status == 200:
+        data = response.json().get("data", [])
+        print(f"  {bbox} -> {len(data)} features")
+        if len(data) >= 2000:
+            print("    (near result cap -- subdividing to avoid truncation)")
+        else:
+            return data
+    elif depth >= max_depth:
+        print(f"  giving up on {bbox} (HTTP {status})")
+        return []
+    else:
+        print(f"  HTTP {status} on {bbox} -- subdividing")
 
-    if 'data' not in res:
-        print(f"Mapillary response had no 'data' key -- full response: {res}")
-
-    raw_data = res.get('data', [])
-    print(f"Mapillary returned {len(raw_data)} street-light features for bbox={bbox}")
+    if depth >= max_depth:
+        return data if response is not None and status == 200 else []
 
     features = []
+    for sub in _split_bbox(bbox):
+        time.sleep(0.3)
+        features.extend(_fetch_tile(sub, access_token, depth + 1, max_depth))
+    return features
+
+
+def ingest_mapillary(bbox, access_token, db_url):
+    print(f"Fetching street lights for bbox {bbox} (auto-tiling as needed)...")
+    raw_data = _fetch_tile(bbox, access_token)
+    print(f"Mapillary returned {len(raw_data)} street-light features total")
+
+    # Overlapping tiles can return the same feature twice.
+    features, seen = [], set()
     for item in raw_data:
-        coords = item['geometry']['coordinates']
-        features.append({'mapillary_id': item['id'], 'geometry': Point(coords[0], coords[1])})
+        mid = str(item["id"])
+        if mid in seen:
+            continue
+        seen.add(mid)
+        coords = item["geometry"]["coordinates"]
+        features.append({
+            "mapillary_id": mid,
+            "geometry": Point(coords[0], coords[1]),
+        })
 
     if not features:
         print("No streetlight features to insert -- skipping DB write.")
@@ -31,14 +89,13 @@ def ingest_mapillary(bbox, access_token, db_url):
 
     engine = create_engine(db_url)
 
-    # mapillary_id is unique in the DB -- skip any we've already ingested so
-    # re-running this (e.g. on an overlapping bbox) doesn't crash on
-    # duplicate-key violations.
     with engine.connect() as conn:
         existing_ids = {
-            row[0] for row in conn.execute(text("SELECT mapillary_id FROM streetlights"))
+            str(row[0])
+            for row in conn.execute(text("SELECT mapillary_id FROM streetlights"))
         }
-    new_features = [f for f in features if str(f['mapillary_id']) not in existing_ids]
+
+    new_features = [f for f in features if f["mapillary_id"] not in existing_ids]
     skipped = len(features) - len(new_features)
     if skipped:
         print(f"Skipping {skipped} street lights already in the database.")
@@ -47,9 +104,7 @@ def ingest_mapillary(bbox, access_token, db_url):
         print("Nothing new to insert -- all features already exist.")
         return
 
-    gdf = gpd.GeoDataFrame(new_features, geometry='geometry', crs="EPSG:4326")
-    gdf = gdf.rename_geometry('geom')
-    gdf.to_postgis('streetlights', engine, if_exists='append', index=False)
+    gdf = gpd.GeoDataFrame(new_features, geometry="geometry", crs="EPSG:4326")
+    gdf = gdf.rename_geometry("geom")
+    gdf.to_postgis("streetlights", engine, if_exists="append", index=False)
     print(f"Inserted {len(new_features)} new street lights.")
-
-#takes data from mapillary, and stores the streetlight data into postgis

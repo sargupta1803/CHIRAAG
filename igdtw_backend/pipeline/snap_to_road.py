@@ -6,7 +6,7 @@ def snap_lights_to_roads(roads_gdf, lights_gdf):
     roads_indexed = roads_projected.set_index('id')
 
     
-    joined = gpd.sjoin_nearest(lights_projected, roads_projected, max_distance=15, distance_col="dist")
+    joined = gpd.sjoin_nearest(lights_projected, roads_projected, max_distance=25, distance_col="dist")
     
     snapped_data = {}
     for idx, row in joined.iterrows():

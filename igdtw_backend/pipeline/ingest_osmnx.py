@@ -28,7 +28,19 @@ def ingest_osm(
     _, gdf_edges = ox.graph_to_gdfs(G)
 
     gdf_edges=gdf_edges.reset_index()
-    edges = gdf_edges[['geometry', 'length', 'osmid']]
+
+
+    # OSMnx emits reciprocal edges for walk networks (u->v and v->u are the
+    # same physical street). Keep one row per undirected pair, or lights get
+    # split arbitrarily between the twins at snap time.
+    gdf_edges["_pair"] = [
+        tuple(sorted(pair)) for pair in zip(gdf_edges["u"], gdf_edges["v"])
+    ]
+    gdf_edges = gdf_edges.drop_duplicates(subset=["_pair", "key"])
+    gdf_edges = gdf_edges.drop(columns=["_pair"])
+
+    edges = gdf_edges[['geometry', 'length', 'osmid']].copy()
+    
     # osmid can be a list when multiple OSM ways got merged into one graph edge
     edges['osmid'] = edges['osmid'].apply(lambda x: x[0] if isinstance(x, list) else x)
     

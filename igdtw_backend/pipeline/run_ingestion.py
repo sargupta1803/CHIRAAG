@@ -33,6 +33,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import geopandas as gpd
 from sqlalchemy import create_engine, text
+import pandas as pd
 
 from app.config import settings
 from app.db import Base
@@ -79,30 +80,32 @@ def score_and_write_segments(engine, roads_gdf: gpd.GeoDataFrame, lights_gdf: gp
     updates = []
     for _, road in roads_gdf.iterrows():
         road_id = road["id"]
-        segment_length = road["length_m"] or 0.0
+        raw_length = road["length_m"]
+        segment_length = float(raw_length) if pd.notna(raw_length) else 0.0
         light_positions = snapped.get(road_id, [])
 
-    if light_positions:
-        metrics = calculate_segment_metrics(
-            segment_length,
-            light_positions
-        )
+        if light_positions:
+            metrics = calculate_segment_metrics(
+                segment_length,
+                light_positions
+            )
 
-        updates.append({
-            "id": road_id,
-            "dark_fraction": metrics["dark_fraction"],
-            "longest_gap_m": metrics["longest_gap_m"],
-            "observation_state": "predicted",
-        })
+            updates.append({
+                "id": road_id,
+                "dark_fraction": metrics["dark_fraction"],
+                "longest_gap_m": metrics["longest_gap_m"],
+                "observation_state": "predicted",
+            })
 
-    else:
-        # No streetlight evidence does NOT mean the road is dark.
-        updates.append({
-            "id": road_id,
-            "dark_fraction": None,
-            "longest_gap_m": None,
-            "observation_state": "unobserved",
-        })
+        else:
+            # No streetlight evidence does NOT mean the road is dark.
+            updates.append({
+                "id": road_id,
+                "dark_fraction": None,
+                "longest_gap_m": None,
+                "observation_state": "unobserved",
+            })
+
 
     print(f"Writing scores for {len(updates)} road segments...")
 

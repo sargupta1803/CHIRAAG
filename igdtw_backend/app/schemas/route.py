@@ -1,8 +1,8 @@
 from pydantic import BaseModel, Field
 
 class Location(BaseModel):
-    lat: float = Field(..., example=28.6139, description="Latitude coordinate")
-    lon: float = Field(..., example=77.2090, description="Longitude coordinate")
+    lat: float = Field(..., json_schema_extra={"example": 28.6139}, description="Latitude coordinate")
+    lon: float = Field(..., json_schema_extra={"example": 77.2090}, description="Longitude coordinate")
 
 class RouteRequest(BaseModel):
     origin: Location
