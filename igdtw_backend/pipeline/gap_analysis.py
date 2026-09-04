@@ -12,8 +12,6 @@ def calculate_segment_metrics(segment_length, light_positions, coverage_radius=2
         if end > start:
             intervals.append((start, end))
         
-    # Merge overlapping illuminated segments, 
-    #if the start of the new light in intervals is less than the last of the merged, then merge them
     intervals.sort()
     merged = []
     for start, end in intervals:
@@ -21,12 +19,12 @@ def calculate_segment_metrics(segment_length, light_positions, coverage_radius=2
             merged.append([start, end])
         else:
             merged[-1][1] = max(merged[-1][1], end)
-    # calculating total lit area, then finding the fraction of area that is dark
+
     lit_length = sum(end - start for start, end in merged)
 
     dark_fraction = max(0.0, (segment_length - lit_length) / segment_length)
     
-    # Calculate longest unlit gap
+
     gaps = []
     current_pos = 0.0
     for start, end in merged:

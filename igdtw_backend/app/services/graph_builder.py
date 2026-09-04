@@ -6,9 +6,7 @@ from sqlalchemy import text
 
 
 def _distance_m(a, b):
-    """
-    Approximate haversine distance between two (lon, lat) points.
-    """
+
     lon1, lat1 = a
     lon2, lat2 = b
 
@@ -29,13 +27,6 @@ def _distance_m(a, b):
 
 
 def _routing_bbox(origin_coords, dest_coords):
-    """
-    Build a geographic bounding box around the requested journey.
-
-    The margin scales with the journey length so that the graph contains
-    enough surrounding streets for realistic alternate routes without
-    loading the entire Delhi dataset.
-    """
 
     ox, oy = origin_coords
     dx, dy = dest_coords
@@ -80,18 +71,7 @@ def build_graph_from_db(
     origin_coords=None,
     dest_coords=None,
 ) -> nx.MultiDiGraph:
-    """
-    Build a NetworkX graph from the relevant portion of the PostGIS road
-    network.
 
-    When origin/destination coordinates are supplied, only road segments
-    intersecting a padded bounding box around the requested journey are
-    loaded. This avoids rebuilding a graph from the entire road database
-    for every request.
-
-    Unknown safety evidence is preserved as NULL instead of being treated
-    as fully lit.
-    """
 
     G = nx.MultiDiGraph()
 
@@ -191,8 +171,7 @@ def build_graph_from_db(
                 row.length_m or 0.0
             ),
 
-            # Preserve NULL so routing can distinguish
-            # unknown evidence from known dark evidence.
+
             dark_fraction=(
                 float(row.dark_fraction)
                 if row.dark_fraction is not None
@@ -215,13 +194,10 @@ def build_graph_from_db(
 
             observation_state=row.observation_state,
 
-            # IMPORTANT:
-            # Keep the complete OSM LineString so the frontend can draw
-            # the actual road shape rather than a straight endpoint line.
+
             geometry=line_geom,
         )
 
-        # One physical walking street can be traversed in both directions.
         G.add_edge(
             start_node,
             end_node,

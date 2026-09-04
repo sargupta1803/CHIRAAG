@@ -22,10 +22,6 @@ def get_segment_evidence(segment_id: int, db: Session = Depends(get_db)):
     if not segment:
         raise HTTPException(status_code=404, detail="Road segment not found")
 
-    # Street lights close enough to plausibly light this segment. Matches the
-    # 25 m snap radius used when scoring. Note this counts lights NEAR the
-    # segment, which on parallel roads can include lights the scoring step
-    # assigned to a neighbour -- so it is an upper bound, not the exact set.
     light_count = db.execute(
         text("""
             SELECT count(*)
@@ -65,16 +61,12 @@ def submit_night_audit(audit: AuditSubmission, db: Session = Depends(get_db)):
     db.add(new_audit)
     db.flush()
 
-    # Ground truth overrides imagery inference. Average every audit for this
-    # segment so a single outlier can't flip a street on its own.
     average_rating = db.query(func.avg(NightAudit.rating)).filter(
         NightAudit.road_segment_id == audit.road_segment_id
     ).scalar()
 
     segment.dark_fraction = max(0.0, min(1.0, 1.0 - (float(average_rating) / 5.0)))
 
-    # A rating describes how dark the street feels overall, not where the
-    # gaps fall, so the imagery-derived gap no longer applies.
     segment.longest_gap_m = None
 
     segment.observation_state = "audited"
