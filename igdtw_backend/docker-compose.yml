@@ -16,7 +16,10 @@ services:
       retries: 10
 
   api:
-    build: .
+    build: 
+      context: .
+      args:
+       INSTALL_EXTRAS: "true"
     ports:
       - "8000:8000"
     environment:
