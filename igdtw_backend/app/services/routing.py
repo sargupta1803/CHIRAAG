@@ -3,12 +3,7 @@ import networkx as nx
 
 
 def _dist(a, b) -> float:
-    """
-    Planar distance between two (lon, lat) tuples.
 
-    Used only for comparing which end of a stored geometry is nearer to
-    a given node, so degree-space is sufficient.
-    """
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
 

@@ -3,7 +3,6 @@ from sklearn.linear_model import LogisticRegression
 
 def train_calibration_model(audit_df):
     X = audit_df[['dark_fraction', 'longest_gap_m']]
-    # Ground truth label: 1 = sufficiently lit, 0 = dark
     y = (audit_df['audit_score'] >= 3).astype(int)    
     model = LogisticRegression()
     model.fit(X, y)

@@ -8,7 +8,6 @@ MAPILLARY_URL = "https://graph.mapillary.com/map_features"
 
 
 def _split_bbox(bbox):
-    """Split 'minLon,minLat,maxLon,maxLat' into four quadrants."""
     min_lon, min_lat, max_lon, max_lat = (float(v) for v in bbox.split(","))
     mid_lon = (min_lon + max_lon) / 2
     mid_lat = (min_lat + max_lat) / 2
@@ -21,11 +20,7 @@ def _split_bbox(bbox):
 
 
 def _fetch_tile(bbox, access_token, depth=0, max_depth=3):
-    """Fetch street-light features for one bbox, subdividing on failure.
 
-    Mapillary returns HTTP 500 / error_subcode 99 for bboxes it considers
-    too large, so we recursively quarter the area instead of giving up.
-    """
     params = {
         "fields": "id,geometry",
         "object_value": "object--street-light",

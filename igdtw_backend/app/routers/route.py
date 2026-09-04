@@ -23,14 +23,10 @@ def compute_route(
     payload: RouteRequest,
     db: Session = Depends(get_db),
 ):
-    """
-    Computes both the baseline shortest path and the safest CHIRAAG route
-    within the user-specified detour budget multiplier (alpha).
-    """
+
 
     try:
-        # Convert request coordinates to the (lon, lat) format used by
-        # PostGIS, NetworkX, and MapLibre.
+
         origin_coords = (
             payload.origin.lon,
             payload.origin.lat,
@@ -41,8 +37,7 @@ def compute_route(
             payload.destination.lat,
         )
 
-        # Build only the relevant geographic portion of the road network
-        # around this journey instead of loading the entire database.
+
         G = build_graph_from_db(
             db,
             origin_coords=origin_coords,
@@ -68,7 +63,7 @@ def compute_route(
         )
 
     except HTTPException:
-        raise
+        raise 
 
     except ValueError as ve:
         raise HTTPException(

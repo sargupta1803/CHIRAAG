@@ -11,9 +11,7 @@ One-off orchestrator that runs the full CHIRAAG data pipeline end-to-end:
 
 This is an OFFLINE batch job. The live API (app/) never imports or calls
 this file -- it only reads whatever is already sitting in road_segments /
-streetlights. Run this manually (or on a schedule) whenever you want to
-(re)populate real data instead of the seed_ward.py mock grid.
-
+streetlights. Run this manually.
 Usage:
     python -m pipeline.run_ingestion \\
         --place "Connaught Place, New Delhi, India" \\
@@ -45,9 +43,7 @@ from pipeline.gap_analysis import calculate_segment_metrics
 
 
 def load_roads(engine) -> gpd.GeoDataFrame:
-    """Load road_segments as a GeoDataFrame with 'id' as a normal column
-    (not the index) -- snap_to_road.py's join looks for an 'id' column on
-    both sides and reads back 'id_right', so the index won't work here."""
+  
     return gpd.read_postgis(
         "SELECT id, length_m, geom AS geometry FROM road_segments",
         engine,
@@ -64,8 +60,7 @@ def load_lights(engine) -> gpd.GeoDataFrame:
 
 
 def score_and_write_segments(engine, roads_gdf: gpd.GeoDataFrame, lights_gdf: gpd.GeoDataFrame):
-    """Snap lights to roads, compute dark_fraction/longest_gap_m per road,
-    and UPDATE road_segments with the results."""
+    
 
     if roads_gdf.empty:
         print("No road segments found -- nothing to score. Run OSM ingestion first.")
@@ -75,7 +70,7 @@ def score_and_write_segments(engine, roads_gdf: gpd.GeoDataFrame, lights_gdf: gp
         print("No streetlights found -- leaving all segments unscored (fully dark by default).")
         snapped = {}
     else:
-        snapped = snap_lights_to_roads(roads_gdf, lights_gdf)  # {road_id: [distances_along_road]}
+        snapped = snap_lights_to_roads(roads_gdf, lights_gdf)  
 
     updates = []
     for _, road in roads_gdf.iterrows():
@@ -98,7 +93,6 @@ def score_and_write_segments(engine, roads_gdf: gpd.GeoDataFrame, lights_gdf: gp
             })
 
         else:
-            # No streetlight evidence does NOT mean the road is dark.
             updates.append({
                 "id": road_id,
                 "dark_fraction": None,
