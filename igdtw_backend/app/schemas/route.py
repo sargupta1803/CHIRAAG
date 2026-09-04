@@ -1,8 +1,18 @@
 from pydantic import BaseModel, Field
 
+
 class Location(BaseModel):
-    lat: float = Field(..., json_schema_extra={"example": 28.6139}, description="Latitude coordinate")
-    lon: float = Field(..., json_schema_extra={"example": 77.2090}, description="Longitude coordinate")
+    lat: float = Field(
+        ...,
+        json_schema_extra={"example": 28.6139},
+        description="Latitude coordinate",
+    )
+    lon: float = Field(
+        ...,
+        json_schema_extra={"example": 77.2090},
+        description="Longitude coordinate",
+    )
+
 
 class RouteRequest(BaseModel):
     origin: Location
@@ -12,14 +22,22 @@ class RouteRequest(BaseModel):
         default=1.20,
         ge=1.0,
         le=2.0,
-        description="Maximum allowed detour multiplier"
+        description="Maximum allowed detour multiplier",
     )
 
     unknown_policy: str = Field(
         default="neutral",
         pattern="^(avoid|neutral|show_gaps)$",
-        description="How to handle road segments with insufficient safety evidence"
+        description="How to handle road segments with insufficient safety evidence",
     )
+
+    hour: int = Field(
+        default=12,
+        ge=0,
+        le=23,
+        description="Hour of day in local time (0-23)",
+    )
+
 
 class PathMetrics(BaseModel):
     total_length_m: float
@@ -28,37 +46,42 @@ class PathMetrics(BaseModel):
     dark_fraction: float
     coverage_ratio: float
 
+
 class RouteSegment(BaseModel):
     """
     One physical street along the route, with its own geometry and evidence.
-
-    This is what lets the map draw streets individually (coloured by
-    observation state) and attach a click handler that opens the evidence
-    drawer for that road_id.
     """
+
     road_id: int | None = None
     length_m: float
 
-    # NULL for unobserved streets. Never coerce to 0.0 -- "no evidence"
-    # is not "no darkness".
+    # NULL means no evidence is available.
     dark_fraction: float | None = None
 
     observation_state: str
-    coordinates: list[tuple[float, float]]  # (lon, lat) points for this street
+    coordinates: list[tuple[float, float]]
+
 
 class RouteOption(BaseModel):
-    nodes: list[tuple[float, float]]  # flattened (lon, lat) polyline for the whole route
-    segments: list[RouteSegment] = []  # per-street breakdown; empty is valid
+    nodes: list[tuple[float, float]]
+    segments: list[RouteSegment] = []
     metrics: PathMetrics
+
 
 class EvidenceSummary(BaseModel):
     unlit_meters_avoided: float
     extra_distance_m: float
     safety_gain_percent: float
 
+
 class RouteResponse(BaseModel):
     status: str
     detour_multiplier_cap: float
+
+    # Time-of-day context used by the routing decision.
+    hour: int
+    time_weighting_factor: float
+
     baseline_route: RouteOption
     chiraag_route: RouteOption
     evidence_summary: EvidenceSummary

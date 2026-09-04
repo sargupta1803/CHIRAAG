@@ -17,10 +17,16 @@ export default function App() {
   const [from, setFrom] = useState('Corridor south')
   const [to, setTo] = useState('Corridor north')
   const [journey, setJourney] = useState({
-    from: 'Corridor south',
-    to: 'Corridor north',
-    fromCoords: { lat: 28.612, lon: 77.212 },
-    toCoords: { lat: 28.617, lon: 77.212 },
+    from: 'India Gate',
+    to: 'Connaught Place',
+    fromCoords: {
+      lat: 28.612945,
+      lon: 77.229466,
+    },
+    toCoords: {
+      lat: 28.631540,
+      lon: 77.216742,
+    },
   })
   const [data, setData] = useState(null)
   const [selectedRoute, setSelectedRoute] = useState('safe')
@@ -32,7 +38,7 @@ export default function App() {
   const [activeSearch, setActiveSearch] = useState(null)
   const searchRequest = useRef(0)
   const searchTimer = useRef(null)
-    const [refreshKey, setRefreshKey] = useState(0)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     if (!journey.fromCoords || !journey.toCoords) return
@@ -66,9 +72,9 @@ export default function App() {
     return () => {
       active = false
     }
-  }, [hour, detour, policy, journey,refreshKey])
+  }, [hour, detour, policy, journey, refreshKey])
 
-    async function handleAudited(roadId) {
+  async function handleAudited(roadId) {
     // Reload the drawer with the new ground truth, then re-route so the
     // change is visible immediately.
     setSelectedEvidence(await getSegment(roadId))

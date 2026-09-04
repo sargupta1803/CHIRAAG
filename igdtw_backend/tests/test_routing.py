@@ -1,11 +1,11 @@
 import networkx as nx
-import pytest
 
 from app.services.routing import (
     find_optimal_route,
     _calculate_edge_weight,
     _get_path_metrics,
     _path_geometry,
+    _time_of_day_weight,
 )
 
 
@@ -37,16 +37,19 @@ def test_edge_weight_scales_with_lambda():
 def test_edge_weight_picks_cheapest_parallel_edge():
     """With parallel edges between the same nodes, the cheapest one wins."""
     edges = {
-        0: dict(length_m=100.0, dark_fraction=0.9,
-                observation_state="predicted"),
-        1: dict(length_m=110.0, dark_fraction=0.0,
-                observation_state="predicted"),
+        0: dict(
+            length_m=100.0,
+            dark_fraction=0.9,
+            observation_state="predicted",
+        ),
+        1: dict(
+            length_m=110.0,
+            dark_fraction=0.0,
+            observation_state="predicted",
+        ),
     }
 
-    # lam=0 -> pure distance, the 100 m road wins.
     assert _calculate_edge_weight(edges, lam=0.0) == 100.0
-
-    # lam=2 -> 100 + 2*90 = 280 vs 110 + 0 = 110, the lit road wins.
     assert _calculate_edge_weight(edges, lam=2.0) == 110.0
 
 
@@ -58,7 +61,14 @@ def test_unknown_segment_is_not_priced_as_dark():
         observation_state="unobserved",
     )
 
-    assert _calculate_edge_weight(edge, lam=10.0, unknown_policy="neutral") == 100.0
+    assert (
+        _calculate_edge_weight(
+            edge,
+            lam=10.0,
+            unknown_policy="neutral",
+        )
+        == 100.0
+    )
 
 
 def test_avoid_policy_penalises_unknown_segments():
@@ -69,11 +79,19 @@ def test_avoid_policy_penalises_unknown_segments():
         observation_state="unobserved",
     )
 
-    neutral = _calculate_edge_weight(edge, lam=2.0, unknown_policy="neutral")
-    avoid = _calculate_edge_weight(edge, lam=2.0, unknown_policy="avoid")
+    neutral = _calculate_edge_weight(
+        edge,
+        lam=2.0,
+        unknown_policy="neutral",
+    )
+
+    avoid = _calculate_edge_weight(
+        edge,
+        lam=2.0,
+        unknown_policy="avoid",
+    )
 
     assert avoid > neutral
-    # 100 + 2 * (100 + 500)
     assert avoid == 1300.0
 
 
@@ -83,13 +101,15 @@ def test_avoid_policy_penalises_unknown_segments():
 
 def test_metrics_on_empty_path_do_not_raise():
     """
-    Regression: coverage_ratio used to be assigned inside the edge loop,
-    so a path with no edges raised UnboundLocalError.
+    Regression test for a single-node path with no edges.
     """
     G = nx.MultiDiGraph()
     G.add_node((0.0, 0.0))
 
-    metrics = _get_path_metrics(G, [(0.0, 0.0)])
+    metrics = _get_path_metrics(
+        G,
+        [(0.0, 0.0)],
+    )
 
     assert metrics["total_length_m"] == 0.0
     assert metrics["coverage_ratio"] == 0.0
@@ -99,7 +119,12 @@ def test_metrics_on_empty_path_do_not_raise():
 def test_unknown_length_is_separate_from_unlit(unknown_graph):
     """Unobserved road counts as unknown, never as unlit."""
     metrics = _get_path_metrics(
-        unknown_graph, [(0.0, 0.0), (0.0, 1.0), (1.0, 1.0)]
+        unknown_graph,
+        [
+            (0.0, 0.0),
+            (0.0, 1.0),
+            (1.0, 1.0),
+        ],
     )
 
     assert metrics["total_length_m"] == 120.0
@@ -124,22 +149,35 @@ def test_lambda_sweep_selects_safer_detour(mock_graph):
     assert result["status"] == "success"
 
     baseline = result["baseline_route"]["metrics"]
+
     assert baseline["total_length_m"] == 100.0
     assert baseline["dark_fraction"] == 0.9
 
     chiraag = result["chiraag_route"]["metrics"]
+
     assert chiraag["total_length_m"] == 120.0
     assert chiraag["dark_fraction"] == 0.0
 
-    assert result["evidence_summary"]["unlit_meters_avoided"] == 90.0
-    assert result["evidence_summary"]["extra_distance_m"] == 20.0
-    assert result["evidence_summary"]["safety_gain_percent"] == 100.0
+    assert (
+        result["evidence_summary"]["unlit_meters_avoided"]
+        == 90.0
+    )
+
+    assert (
+        result["evidence_summary"]["extra_distance_m"]
+        == 20.0
+    )
+
+    assert (
+        result["evidence_summary"]["safety_gain_percent"]
+        == 100.0
+    )
 
 
 def test_detour_cap_rejects_the_safer_route(mock_graph):
     """
-    With alpha=1.10 the 120 m detour exceeds the 110 m budget, so the
-    dark baseline must be returned unchanged.
+    With alpha=1.10 the 120 m detour exceeds the 110 m budget,
+    so the dark baseline must be returned unchanged.
     """
     result = find_optimal_route(
         G=mock_graph,
@@ -148,14 +186,24 @@ def test_detour_cap_rejects_the_safer_route(mock_graph):
         alpha=1.10,
     )
 
-    assert result["chiraag_route"]["metrics"]["total_length_m"] == 100.0
-    assert result["evidence_summary"]["unlit_meters_avoided"] == 0.0
-    assert result["evidence_summary"]["extra_distance_m"] == 0.0
+    assert (
+        result["chiraag_route"]["metrics"]["total_length_m"]
+        == 100.0
+    )
+
+    assert (
+        result["evidence_summary"]["unlit_meters_avoided"]
+        == 0.0
+    )
+
+    assert (
+        result["evidence_summary"]["extra_distance_m"]
+        == 0.0
+    )
 
 
 def test_graph_is_traversable_in_both_directions(mock_graph):
     """
-    The DB holds one row per street; graph_builder adds both directions.
     Routing backwards must work as well as forwards.
     """
     result = find_optimal_route(
@@ -165,13 +213,15 @@ def test_graph_is_traversable_in_both_directions(mock_graph):
         alpha=1.30,
     )
 
-    assert result["chiraag_route"]["metrics"]["total_length_m"] == 120.0
+    assert (
+        result["chiraag_route"]["metrics"]["total_length_m"]
+        == 120.0
+    )
 
 
 def test_unknown_policy_avoid_prefers_the_known_road(unknown_graph):
     """
-    Under 'avoid', a known-dark road beats an unobserved detour, because
-    unknown exposure is added to the comparison.
+    Under 'avoid', a known-dark road beats an unobserved detour.
     """
     result = find_optimal_route(
         G=unknown_graph,
@@ -181,7 +231,98 @@ def test_unknown_policy_avoid_prefers_the_known_road(unknown_graph):
         unknown_policy="avoid",
     )
 
-    assert result["chiraag_route"]["metrics"]["total_length_m"] == 100.0
+    assert (
+        result["chiraag_route"]["metrics"]["total_length_m"]
+        == 100.0
+    )
+
+
+# --------------------------------------------------------------------------
+# Time-of-day weighting
+# --------------------------------------------------------------------------
+
+def test_time_of_day_weight_is_bounded():
+    assert _time_of_day_weight(12) == 1.0
+    assert _time_of_day_weight(20) == 1.15
+    assert _time_of_day_weight(23) == 1.30
+    assert _time_of_day_weight(3) == 1.30
+
+
+def test_time_of_day_can_change_route_choice():
+    """
+    Night weighting can justify a modestly longer,
+    better-lit bypass.
+    """
+    G = nx.MultiDiGraph()
+
+    A = (0.0, 0.0)
+    M = (0.0, 1.0)
+    D = (1.0, 1.0)
+
+    def add_bidirectional(u, v, **attrs):
+        G.add_edge(u, v, **attrs)
+        G.add_edge(v, u, **attrs)
+
+    add_bidirectional(
+        A,
+        D,
+        id=1,
+        length_m=100.0,
+        dark_fraction=0.30,
+        observation_state="predicted",
+    )
+
+    add_bidirectional(
+        A,
+        M,
+        id=2,
+        length_m=57.5,
+        dark_fraction=0.05,
+        observation_state="audited",
+    )
+
+    add_bidirectional(
+        M,
+        D,
+        id=3,
+        length_m=57.5,
+        dark_fraction=0.05,
+        observation_state="audited",
+    )
+
+    day = find_optimal_route(
+        G,
+        A,
+        D,
+        alpha=1.20,
+        hour=12,
+    )
+
+    night = find_optimal_route(
+        G,
+        A,
+        D,
+        alpha=1.20,
+        hour=23,
+    )
+
+    assert day["time_weighting_factor"] == 1.0
+    assert night["time_weighting_factor"] == 1.30
+
+    assert (
+        day["chiraag_route"]["metrics"]["total_length_m"]
+        == 100.0
+    )
+
+    assert (
+        night["chiraag_route"]["metrics"]["total_length_m"]
+        == 115.0
+    )
+
+    assert (
+        day["baseline_route"]["metrics"]
+        == night["baseline_route"]["metrics"]
+    )
 
 
 # --------------------------------------------------------------------------
@@ -190,40 +331,68 @@ def test_unknown_policy_avoid_prefers_the_known_road(unknown_graph):
 
 def test_path_geometry_includes_interior_vertices(curved_graph):
     """
-    Returned coordinates follow the street, not straight chords between
-    intersections.
+    Returned coordinates follow the street,
+    not straight chords between intersections.
     """
     A = (77.2120, 28.6120)
     B = (77.2120, 28.6135)
     C = (77.2125, 28.6150)
 
-    coords = _path_geometry(curved_graph, [A, B, C])
+    coords = _path_geometry(
+        curved_graph,
+        [A, B, C],
+    )
 
     assert len(coords) > 3
     assert tuple(coords[0]) == A
     assert tuple(coords[-1]) == C
 
-    # The interior vertex of the curved street is present, in order.
-    assert (77.2128, 28.6142) in [tuple(c) for c in coords]
+    assert (
+        77.2128,
+        28.6142,
+    ) in [tuple(c) for c in coords]
 
 
 def test_path_geometry_orients_reversed_edges(curved_graph):
     """
-    The middle street is stored C->B but traversed B->C. Its vertices must
-    come back in traversal order, with no duplicated junction node.
+    Reversed street geometry must be returned
+    in traversal order.
     """
     A = (77.2120, 28.6120)
     B = (77.2120, 28.6135)
     C = (77.2125, 28.6150)
 
-    coords = [tuple(c) for c in _path_geometry(curved_graph, [A, B, C])]
+    coords = [
+        tuple(c)
+        for c in _path_geometry(
+            curved_graph,
+            [A, B, C],
+        )
+    ]
 
-    assert coords.index(B) < coords.index((77.2128, 28.6142)) < coords.index(C)
+    assert (
+        coords.index(B)
+        < coords.index((77.2128, 28.6142))
+        < coords.index(C)
+    )
+
     assert len(coords) == len(set(coords))
 
 
 def test_path_geometry_falls_back_without_geometry(mock_graph):
-    """Synthetic graphs carrying no geometry still return endpoints."""
-    coords = _path_geometry(mock_graph, [(0.0, 0.0), (1.0, 1.0)])
+    """Synthetic graphs without geometry return endpoints."""
+    coords = _path_geometry(
+        mock_graph,
+        [
+            (0.0, 0.0),
+            (1.0, 1.0),
+        ],
+    )
 
-    assert [tuple(c) for c in coords] == [(0.0, 0.0), (1.0, 1.0)]
+    assert [
+        tuple(c)
+        for c in coords
+    ] == [
+        (0.0, 0.0),
+        (1.0, 1.0),
+    ]

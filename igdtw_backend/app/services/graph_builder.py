@@ -1,33 +1,181 @@
+import math
+
 import networkx as nx
 import shapely.wkb
 from sqlalchemy import text
 
 
-def build_graph_from_db(db_session) -> nx.MultiDiGraph:
+def _distance_m(a, b):
     """
-    Fetch scored road segments from PostGIS and build a NetworkX graph.
+    Approximate haversine distance between two (lon, lat) points.
+    """
+    lon1, lat1 = a
+    lon2, lat2 = b
+
+    lat1 = math.radians(lat1)
+    lat2 = math.radians(lat2)
+
+    dlat = lat2 - lat1
+    dlon = math.radians(lon2 - lon1)
+
+    h = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(lat1)
+        * math.cos(lat2)
+        * math.sin(dlon / 2) ** 2
+    )
+
+    return 2 * 6371000 * math.asin(math.sqrt(h))
+
+
+def _routing_bbox(origin_coords, dest_coords):
+    """
+    Build a geographic bounding box around the requested journey.
+
+    The margin scales with the journey length so that the graph contains
+    enough surrounding streets for realistic alternate routes without
+    loading the entire Delhi dataset.
+    """
+
+    ox, oy = origin_coords
+    dx, dy = dest_coords
+
+    straight_distance_m = _distance_m(
+        origin_coords,
+        dest_coords,
+    )
+
+    # Rough conversion from metres to degrees.
+    lat_margin = max(
+        0.015,
+        (straight_distance_m * 0.25) / 111000.0,
+    )
+
+    # Longitude degrees are narrower at Delhi's latitude.
+    mean_lat = math.radians((oy + dy) / 2)
+    lon_metres_per_degree = 111320.0 * math.cos(mean_lat)
+
+    lon_margin = max(
+        0.015,
+        (straight_distance_m * 0.25)
+        / lon_metres_per_degree,
+    )
+
+    min_lon = min(ox, dx) - lon_margin
+    max_lon = max(ox, dx) + lon_margin
+
+    min_lat = min(oy, dy) - lat_margin
+    max_lat = max(oy, dy) + lat_margin
+
+    return (
+        min_lon,
+        min_lat,
+        max_lon,
+        max_lat,
+    )
+
+
+def build_graph_from_db(
+    db_session,
+    origin_coords=None,
+    dest_coords=None,
+) -> nx.MultiDiGraph:
+    """
+    Build a NetworkX graph from the relevant portion of the PostGIS road
+    network.
+
+    When origin/destination coordinates are supplied, only road segments
+    intersecting a padded bounding box around the requested journey are
+    loaded. This avoids rebuilding a graph from the entire road database
+    for every request.
+
     Unknown safety evidence is preserved as NULL instead of being treated
     as fully lit.
     """
+
     G = nx.MultiDiGraph()
 
-    query = text("""
-        SELECT
-            id,
-            osm_id,
-            length_m,
-            dark_fraction,
-            longest_gap_m,
-            calibrated_lighting_prob,
-            observation_state,
-            ST_AsBinary(geom) AS geom_wkb
-        FROM road_segments
-    """)
+    params = {}
 
-    result = db_session.execute(query).fetchall()
+    if origin_coords is not None and dest_coords is not None:
+        (
+            min_lon,
+            min_lat,
+            max_lon,
+            max_lat,
+        ) = _routing_bbox(
+            origin_coords,
+            dest_coords,
+        )
+
+        params = {
+            "min_lon": min_lon,
+            "min_lat": min_lat,
+            "max_lon": max_lon,
+            "max_lat": max_lat,
+        }
+
+        query = text("""
+            SELECT
+                id,
+                osm_id,
+                length_m,
+                dark_fraction,
+                longest_gap_m,
+                calibrated_lighting_prob,
+                observation_state,
+                ST_AsBinary(geom) AS geom_wkb
+            FROM road_segments
+            WHERE geom && ST_MakeEnvelope(
+                :min_lon,
+                :min_lat,
+                :max_lon,
+                :max_lat,
+                4326
+            )
+            AND ST_Intersects(
+                geom,
+                ST_MakeEnvelope(
+                    :min_lon,
+                    :min_lat,
+                    :max_lon,
+                    :max_lat,
+                    4326
+                )
+            )
+        """)
+
+    else:
+        # Backwards-compatible fallback.
+        #
+        # The router will be updated to always provide coordinates, so this
+        # path should not be used during normal routing.
+        query = text("""
+            SELECT
+                id,
+                osm_id,
+                length_m,
+                dark_fraction,
+                longest_gap_m,
+                calibrated_lighting_prob,
+                observation_state,
+                ST_AsBinary(geom) AS geom_wkb
+            FROM road_segments
+        """)
+
+    result = db_session.execute(
+        query,
+        params,
+    ).fetchall()
 
     for row in result:
-        line_geom = shapely.wkb.loads(bytes(row.geom_wkb))
+        if row.geom_wkb is None:
+            continue
+
+        line_geom = shapely.wkb.loads(
+            bytes(row.geom_wkb)
+        )
+
         coords = list(line_geom.coords)
 
         if len(coords) < 2:
@@ -39,32 +187,51 @@ def build_graph_from_db(db_session) -> nx.MultiDiGraph:
         edge_attrs = dict(
             id=row.id,
             osm_id=row.osm_id,
-            length_m=float(row.length_m or 0.0),
+            length_m=float(
+                row.length_m or 0.0
+            ),
 
-            # Preserve NULL so routing can distinguish unknown from known dark.
+            # Preserve NULL so routing can distinguish
+            # unknown evidence from known dark evidence.
             dark_fraction=(
                 float(row.dark_fraction)
                 if row.dark_fraction is not None
                 else None
             ),
+
             longest_gap_m=(
                 float(row.longest_gap_m)
                 if row.longest_gap_m is not None
                 else None
             ),
+
             calibrated_prob=(
-                float(row.calibrated_lighting_prob)
+                float(
+                    row.calibrated_lighting_prob
+                )
                 if row.calibrated_lighting_prob is not None
                 else 0.5
             ),
+
             observation_state=row.observation_state,
+
+            # IMPORTANT:
+            # Keep the complete OSM LineString so the frontend can draw
+            # the actual road shape rather than a straight endpoint line.
             geometry=line_geom,
         )
 
-        # One DB row = one undirected street. Walking is bidirectional, so
-        # add both traversal directions.
-        G.add_edge(start_node, end_node, **edge_attrs)
-        G.add_edge(end_node, start_node, **edge_attrs)
-        
+        # One physical walking street can be traversed in both directions.
+        G.add_edge(
+            start_node,
+            end_node,
+            **edge_attrs,
+        )
+
+        G.add_edge(
+            end_node,
+            start_node,
+            **edge_attrs,
+        )
 
     return G

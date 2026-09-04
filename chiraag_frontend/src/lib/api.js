@@ -30,6 +30,7 @@ export async function getRoute(
       },
       alpha,
       unknown_policy: unknownPolicy,
+      hour: Number(hour),
     }),
   })
 
@@ -50,9 +51,15 @@ export async function getRoute(
 
     throw new Error(message)
   }
+
   return response.json()
 }
-export async function postAudit(roadSegmentId, rating, observedLightCount = 0) {
+
+export async function postAudit(
+  roadSegmentId,
+  rating,
+  observedLightCount = 0
+) {
   const response = await fetch(`${BASE_URL}/api/v1/evidence/audit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -69,6 +76,7 @@ export async function postAudit(roadSegmentId, rating, observedLightCount = 0) {
 
   return response.json()
 }
+
 export async function getSegment(id) {
   const response = await fetch(
     `${BASE_URL}/api/v1/evidence/segment/${id}`
