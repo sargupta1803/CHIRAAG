@@ -25,6 +25,36 @@ const lineFeature = (coordinates) => ({
   },
 })
 
+// Render the actual geometry of every physical road segment.
+// Do NOT connect route nodes directly with straight lines because
+// graph nodes represent endpoints/intersections, not the road shape.
+const routeGeometryCollection = route => {
+  const segments = route?.segments || []
+
+  if (segments.length > 0) {
+    return {
+      type: 'FeatureCollection',
+      features: segments
+        .filter(segment => segment.coordinates?.length >= 2)
+        .map(segment => ({
+          type: 'Feature',
+          properties: {
+            road_id: segment.road_id,
+            observation_state: segment.observation_state,
+            dark_fraction: segment.dark_fraction ?? -1,
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates: segment.coordinates,
+          },
+        })),
+    }
+  }
+
+  // Safe fallback for old/API responses that do not contain segments.
+  return line(lineFeature(route?.nodes || []))
+}
+
 // One feature per physical street, carrying the evidence needed to colour
 // it and to open the drawer when clicked.
 const segmentCollection = (route) => ({
@@ -39,7 +69,7 @@ const segmentCollection = (route) => ({
         // GeoJSON filters can't match null, so unknown is encoded as -1.
         dark_fraction:
           segment.dark_fraction === null ||
-          segment.dark_fraction === undefined
+            segment.dark_fraction === undefined
             ? -1
             : segment.dark_fraction,
       },
@@ -106,7 +136,7 @@ export function MapView({
     if (!m.getSource('shortest')) {
       m.addSource('shortest', {
         type: 'geojson',
-        data: line(lineFeature(data.baseline_route.nodes)),
+        data: routeGeometryCollection(data.baseline_route),
       })
 
       m.addLayer({
@@ -128,7 +158,7 @@ export function MapView({
     if (!m.getSource('safest')) {
       m.addSource('safest', {
         type: 'geojson',
-        data: line(lineFeature(data.chiraag_route.nodes)),
+        data: routeGeometryCollection(data.chiraag_route),
       })
 
       m.addLayer({
@@ -218,16 +248,24 @@ export function MapView({
     markers.current.forEach(marker => marker.remove())
     markers.current = []
 
-    if (!fromCoords || !toCoords) return
+    const route = activeRoute()
+
+    if (!route?.nodes?.length) return
+
+    // Use the actual snapped route endpoints rather than the raw
+    // geocoded search coordinates. This keeps the markers aligned
+    // with the road network used by CHIRAAG.
+    const start = route.nodes[0]
+    const end = route.nodes[route.nodes.length - 1]
 
     const points = [
       {
-        coords: [fromCoords.lon, fromCoords.lat],
+        coords: start,
         color: '#222522',
         popup: fromName,
       },
       {
-        coords: [toCoords.lon, toCoords.lat],
+        coords: end,
         color: '#ad7f24',
         popup: toName,
       },
@@ -307,16 +345,20 @@ export function MapView({
     if (!m || !m.isStyleLoaded()) return
 
     m.getSource('shortest')?.setData(
-      line(lineFeature(data.baseline_route.nodes))
+      routeGeometryCollection(data.baseline_route)
     )
 
     m.getSource('safest')?.setData(
-      line(lineFeature(data.chiraag_route.nodes))
+      routeGeometryCollection(data.chiraag_route)
     )
 
     m.getSource('segments')?.setData(
       segmentCollection(activeRoute())
     )
+
+    // Reposition the origin/destination markers to the
+    // currently active route's snapped endpoints.
+    addMarkers(m)
 
     m.setPaintProperty(
       'shortest-line',
