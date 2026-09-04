@@ -10,23 +10,47 @@ import { EvidencePanel } from './components/EvidencePanel'
 import { MapView } from './components/MapView'
 
 
+// Known-good pairs inside the ingested network, with coordinates baked in so
+// they never depend on a geocoding round-trip. Verify each against
+// find-demo-routes.ps1 before relying on them.
+const PRESETS = [
+  {
+    label: 'India Gate \u2192 CP',
+    from: 'India Gate',
+    fromCoords: { lat: 28.612945, lon: 77.229466 },
+    to: 'Connaught Place',
+    toCoords: { lat: 28.631540, lon: 77.216742 },
+  },
+  {
+    label: 'Secretariat \u2192 Jantar Mantar',
+    from: 'Central Secretariat',
+    fromCoords: { lat: 28.6152, lon: 77.2122 },
+    to: 'Jantar Mantar',
+    toCoords: { lat: 28.6271, lon: 77.2166 },
+  },
+  {
+    label: 'Museum \u2192 Patel Chowk',
+    from: 'National Museum',
+    fromCoords: { lat: 28.6118, lon: 77.2194 },
+    to: 'Patel Chowk',
+    toCoords: { lat: 28.6236, lon: 77.2144 },
+  },
+]
+
+const DEFAULT_JOURNEY = PRESETS[0]
+
+
 export default function App() {
   const [hour, setHour] = useState(23)
   const [detour, setDetour] = useState(20)
   const [policy, setPolicy] = useState('neutral')
-  const [from, setFrom] = useState('Corridor south')
-  const [to, setTo] = useState('Corridor north')
+  const [from, setFrom] = useState(DEFAULT_JOURNEY.from)
+  const [to, setTo] = useState(DEFAULT_JOURNEY.to)
   const [journey, setJourney] = useState({
-    from: 'India Gate',
-    to: 'Connaught Place',
-    fromCoords: {
-      lat: 28.612945,
-      lon: 77.229466,
-    },
-    toCoords: {
-      lat: 28.631540,
-      lon: 77.216742,
-    },
+    from: DEFAULT_JOURNEY.from,
+    to: DEFAULT_JOURNEY.to,
+    fromCoords: DEFAULT_JOURNEY.fromCoords,
+    toCoords: DEFAULT_JOURNEY.toCoords,
   })
   const [data, setData] = useState(null)
   const [selectedRoute, setSelectedRoute] = useState('safe')
@@ -63,7 +87,9 @@ export default function App() {
       })
       .catch(error => {
         console.error(error)
-        if (active) setError(true)
+        // The API explains itself -- out-of-area, no path, and so on. Show
+        // that instead of a generic banner.
+        if (active) setError(error.message)
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -74,6 +100,22 @@ export default function App() {
     }
   }, [hour, detour, policy, journey, refreshKey])
 
+  function applyPreset(preset) {
+    setFrom(preset.from)
+    setTo(preset.to)
+    setFromSuggestions([])
+    setToSuggestions([])
+    setActiveSearch(null)
+    setSelectedEvidence(null)
+
+    setJourney({
+      from: preset.from,
+      to: preset.to,
+      fromCoords: preset.fromCoords,
+      toCoords: preset.toCoords,
+    })
+  }
+
   async function handleAudited(roadId) {
     // Reload the drawer with the new ground truth, then re-route so the
     // change is visible immediately.
@@ -82,7 +124,12 @@ export default function App() {
   }
 
   async function selectSegment(id) {
-    try { setSelectedEvidence(await getSegment(id)) } catch { setError(true) }
+    try {
+      setSelectedEvidence(await getSegment(id))
+    } catch (error) {
+      console.error(error)
+      setError(error.message)
+    }
   }
 
   async function searchPlaces(query, setter) {
@@ -168,29 +215,6 @@ export default function App() {
     }, 350)
   }
 
-  function getPlaceArea(place) {
-    const context = place.context || []
-
-    const preferred = [
-      'neighbourhood',
-      'locality',
-      'municipality',
-      'road',
-    ]
-
-    for (const kind of preferred) {
-      const item = context.find(
-        entry =>
-          entry.kind === kind ||
-          entry.place_designation === kind
-      )
-
-      if (item?.text) return item.text
-    }
-
-    return place.place_name || 'Delhi'
-  }
-
   function getDistanceKm(place) {
     const [lon, lat] = place.geometry.coordinates
 
@@ -212,12 +236,12 @@ export default function App() {
   async function findRoute(event) {
     event.preventDefault()
 
-    const fromPlace = from.trim() || 'Connaught Place'
-    const toPlace = to.trim() || 'India Gate'
+    const fromPlace = from.trim() || DEFAULT_JOURNEY.from
+    const toPlace = to.trim() || DEFAULT_JOURNEY.to
 
     try {
       setLoading(true)
-      setError(false)
+      setError(null)
 
       const [fromResponse, toResponse] = await Promise.all([
         fetch(
@@ -236,7 +260,7 @@ export default function App() {
       const toData = await toResponse.json()
 
       if (!fromData.features?.length || !toData.features?.length) {
-        throw new Error('Location not found')
+        throw new Error('We could not find one of those places in Delhi.')
       }
 
       const [fromLon, fromLat] =
@@ -259,7 +283,7 @@ export default function App() {
       })
     } catch (error) {
       console.error(error)
-      setError(true)
+      setError(error.message)
       setLoading(false)
     }
   }
@@ -277,6 +301,55 @@ export default function App() {
     />}
     <Header />
     <form className="route-search" onSubmit={findRoute} aria-label="Find a safer route">
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: 4,
+          marginBottom: 10,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 9,
+            letterSpacing: '0.08em',
+            opacity: 0.4,
+            flex: '0 0 auto',
+          }}
+        >
+          TRY
+        </span>
+
+        {PRESETS.map(preset => {
+          const isActive =
+            journey.from === preset.from && journey.to === preset.to
+
+          return (
+            <button
+              type="button"
+              key={preset.label}
+              onClick={() => applyPreset(preset)}
+              style={{
+                flex: '0 0 auto',
+                whiteSpace: 'nowrap',
+                padding: '3px 8px',
+                fontSize: 10,
+                lineHeight: 1.5,
+                fontFamily: 'inherit',
+                borderRadius: 999,
+                border: `1px solid ${isActive ? '#222522' : 'rgba(0,0,0,0.16)'}`,
+                background: isActive ? '#222522' : '#fff',
+                color: isActive ? '#fff' : '#222522',
+                cursor: 'pointer',
+              }}
+            >
+              {preset.label}
+            </button>
+          )
+        })}
+      </div>
+
       <div
         className="place-field"
         style={{ position: 'relative' }}
@@ -408,7 +481,7 @@ export default function App() {
       {loading && <div className="quiet-loading">Updating route <i /></div>}
       {error && (
         <div className="quiet-error">
-          Route data unavailable
+          {error}
         </div>
       )}
       {data && <>

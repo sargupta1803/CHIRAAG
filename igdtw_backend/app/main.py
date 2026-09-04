@@ -14,12 +14,14 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# Enable CORS so your frontend (Mapbox / Leaflet) can hit the API locally
+# Restricted to the configured frontend origins. A wildcard combined with
+# allow_credentials=True is rejected by browsers anyway, and this API sends
+# no cookies or auth headers, so credentials stay off.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
